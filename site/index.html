@@ -124,6 +124,17 @@ body.kev-open .core{background:radial-gradient(ellipse at 68% 55%,rgba(255,61,94
 .chip.c-Confirmed{color:var(--red);border-color:var(--red);background:var(--red-d)}
 .chip.c-Likely{color:var(--amber);border-color:var(--amber);background:var(--amber-d)}
 .chip.c-Vendor{color:var(--blue);border-color:rgba(90,169,255,.5)}
+.chip.c-Watched{color:#c9a8ff;border-color:rgba(201,168,255,.5)}
+.w-list{display:flex;flex-wrap:wrap;gap:8px}
+.w-chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line2);border-radius:999px;padding:4px 6px 4px 12px;font-size:13px}
+.w-chip small{color:var(--muted)}
+.w-chip button{width:26px;height:26px;border-radius:50%;border:1px solid var(--line2);background:none;cursor:pointer;line-height:1}
+.w-chip button:hover{border-color:var(--red);color:var(--red)}
+.w-chip.new{border-color:var(--teal)}
+#w-form input{background:rgba(5,12,18,.7);border:1px solid var(--line2);border-radius:9px;padding:7px 10px;min-height:36px}
+.w-save{border:1px dashed var(--amber);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.w-save[hidden]{display:none}
+.w-save p{margin:0;font-size:13px}
 .chip.alert{color:var(--bg);background:var(--amber);border-color:var(--amber)}
 .acts{display:flex;gap:6px}
 .btn{background:rgba(5,12,18,.6);border:1px solid var(--line2);border-radius:9px;padding:7px 12px;cursor:pointer;min-height:36px;white-space:nowrap;transition:border-color .15s,color .15s,background .15s}
@@ -140,6 +151,37 @@ body.kev-open .core{background:radial-gradient(ellipse at 68% 55%,rgba(255,61,94
 .tix-c{border:1px solid var(--line2);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:rgba(5,12,18,.45)}
 .tix-n{display:flex;justify-content:space-between;gap:8px}.tix-n span{color:var(--muted);font-size:12px}
 .tix-s{font-family:var(--f-mono);font-size:11px;color:var(--muted);word-break:break-word}
+/* one-line fix + tabbed drawer */
+.fix{display:flex;gap:8px;align-items:baseline;margin-top:4px;font-size:13px;min-width:0}
+.fix b{font:600 10px var(--f-display);letter-spacing:.2em;text-transform:uppercase;color:var(--bg);background:var(--teal);border-radius:4px;padding:1px 6px;flex:none}
+.fix span{color:#bff3ea;font-family:var(--f-mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drawer{grid-column:1/-1;border-top:1px solid var(--line);padding-top:8px}
+.dtabs{display:flex;gap:2px;align-items:center;border-bottom:1px solid var(--line)}
+.dtabs [role=tab]{background:none;border:0;border-bottom:2px solid transparent;padding:6px 12px;color:var(--muted);font:600 13px var(--f-display);letter-spacing:.12em;text-transform:uppercase;cursor:pointer}
+.dtabs [role=tab][aria-selected=true]{color:var(--text);border-color:var(--teal)}
+.dclose{margin-left:auto;width:30px;height:30px;border-radius:8px;border:1px solid var(--line2);background:none;cursor:pointer;font-size:18px;line-height:1}
+.dclose:hover{border-color:var(--red);color:var(--red)}
+.dbody{max-height:340px;overflow:auto;padding:10px 2px 4px;overscroll-behavior:contain}
+.dbody .detail{border:0;padding:0}
+.dbody .detail h4{margin-top:8px}
+.dbody .detail p{margin:0 0 6px;font-size:13px}
+.dgrp{border:1px solid var(--line);border-radius:9px;margin-bottom:6px;background:rgba(5,12,18,.35)}
+.dgrp summary{display:flex;justify-content:space-between;gap:10px;padding:7px 12px;cursor:pointer;list-style:none}
+.dgrp summary::-webkit-details-marker{display:none}
+.dgrp summary::before{content:"▸";color:var(--teal);margin-right:6px}
+.dgrp[open] summary::before{content:"▾"}
+.dgrp summary b{flex:1}
+.dgrp summary span{color:var(--muted);font-size:12px}
+.dgrp ul{list-style:none;margin:0;padding:0 12px 8px}
+.dgrp li{display:grid;grid-template-columns:minmax(120px,1.2fr) minmax(110px,1fr) 110px minmax(200px,2fr);gap:10px;padding:4px 0;border-top:1px solid var(--line);font:12px var(--f-mono)}
+.dgrp li .dm,.dgrp li .dv{color:var(--muted)}
+.dgrp li .df{color:#bff3ea}
+.dgrp li.more{display:block;color:var(--muted)}
+.tk-h{display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--muted);font-size:13px;margin-bottom:6px;flex-wrap:wrap}
+.tk{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 10px;border-top:1px solid var(--line);flex-wrap:wrap}
+.tk-n{display:flex;gap:10px;align-items:baseline;min-width:0}
+.tk-n span{color:var(--muted);font-size:12px}
+@media (max-width:760px){.dgrp li{grid-template-columns:1fr 1fr}.fix span{white-space:normal}}
 .empty-state{padding:34px;text-align:center;color:var(--muted)}
 .empty-state strong{display:block;color:var(--text);font:600 20px var(--f-display);letter-spacing:.1em;margin-bottom:6px}
 .drop{border:1.5px dashed var(--line2);border-radius:var(--radius);padding:26px;text-align:center;transition:border-color .2s,background .2s}
@@ -154,6 +196,11 @@ td.num{font-family:var(--f-mono);text-align:right} th.num{text-align:right}
 .set h3{margin:0;font:600 16px var(--f-display);letter-spacing:.16em;text-transform:uppercase}
 .set p{margin:0;color:var(--muted)}
 .set .line{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.notif{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.notif p{margin:0;font-size:13px}
+.pill{font:600 11px var(--f-display);letter-spacing:.14em;text-transform:uppercase;padding:2px 10px;border-radius:999px;border:1px solid var(--line2);color:var(--muted)}
+.pill.ok{color:var(--teal);border-color:var(--teal);background:var(--teal-d)}
+.pill.bad{color:var(--red);border-color:var(--red);background:var(--red-d)}
 .set input[type=number]{width:80px;background:rgba(5,12,18,.7);border:1px solid var(--line2);border-radius:9px;padding:7px 10px}
 
 /* toasts + pulse */
@@ -247,7 +294,7 @@ td.num{font-family:var(--f-mono);text-align:right} th.num{text-align:right}
       <div class="glass"><h3 class="panel-h">Most exposed clients</h3><ul class="mini" id="p-clients"></ul></div>
       <div class="glass"><h3 class="panel-h">Feed health</h3><ul class="mini" id="p-feeds"></ul></div>
     </div>
-    <div class="bar"><h2>Triage</h2><label><input type="checkbox" id="ov-hide"> Hide reviewed</label></div>
+    <div class="bar"><h2>Triage</h2><label title="Vendor-only = we have this vendor, but the advisory names a product we could not find in the tracker"><input type="checkbox" id="ov-vo"> Include vendor-only matches</label><label><input type="checkbox" id="ov-hide"> Hide reviewed</label></div>
     <div class="list" id="triage"></div>
   </section>
 
@@ -299,9 +346,32 @@ td.num{font-family:var(--f-mono);text-align:right} th.num{text-align:right}
         <label class="line">or its CVSS is at least <input type="number" id="s-cvss" min="0" max="10" step="0.1"></label>
         <h3 style="margin-top:8px">Signals</h3>
         <label class="line"><input type="checkbox" id="s-sound"> Sound</label>
-        <div class="line"><button class="btn" id="s-notify">Turn on Windows notifications</button><span id="s-notify-st" style="color:var(--muted)"></span></div>
+        <div class="notif">
+          <div class="line"><b>Windows notifications</b><span class="pill" id="s-notify-pill">Off</span></div>
+          <p id="s-notify-st"></p>
+          <div class="line"><button class="btn" id="s-notify">Turn on</button><button class="btn" id="s-notify-test" hidden>Send test</button></div>
+        </div>
         <label class="line"><input type="checkbox" id="s-lite"> Lite mode: no animations or effects</label>
         <div class="line"><button class="btn danger" id="s-unreview">Clear my review marks</button></div>
+      </div>
+      <div class="glass set" id="watch-panel" style="grid-column:1/-1">
+        <h3>Watched vendors</h3>
+        <p>VIGIL collects advisories for every vendor in your inventory. Add any other vendor here to watch it too, even with no devices in the tracker. Watched vendors show in triage and alert when exploited or CVSS ≥ your rule.</p>
+        <div class="w-list" id="w-list"></div>
+        <form class="line" id="w-form" autocomplete="off">
+          <input id="w-name" placeholder="Vendor name, e.g. Citrix" aria-label="Vendor name" required>
+          <input id="w-alias" placeholder="Other names, comma separated, e.g. NetScaler, Cloud Software Group" aria-label="Other names" style="flex:1;min-width:240px">
+          <button class="btn primary" type="submit">Add</button>
+        </form>
+        <div class="w-save" id="w-save" hidden>
+          <p><b>Not saved yet.</b> The list lives in your GitHub repository so the collector sees it. Two clicks:</p>
+          <div class="line">
+            <button class="btn primary" id="w-copy" type="button">1 · Copy updated list</button>
+            <a class="btn" id="w-edit" target="_blank" rel="noopener noreferrer">2 · Open watch.json on GitHub ↗</a>
+            <button class="btn" id="w-undo" type="button">Discard changes</button>
+          </div>
+          <p class="mono" id="w-how">On GitHub: select all the text in the file, paste, then <b>Commit changes</b>. New advisories for it arrive within 15 minutes.</p>
+        </div>
       </div>
     </div>
   </section>

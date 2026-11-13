@@ -118,3 +118,73 @@ test('one ticket per client, each with only its own devices', () => {
 test('no matched devices gives no tickets', () => {
   assert.deepEqual(V.clientTickets(fortiAdv(), { confidence: null, devices: [], clients: [], teams: [] }, (k) => k), []);
 });
+
+const twoBranch = (o = {}) => fortiAdv({ affected: [{ product: 'FortiOS', versions: [{ from: '7.0.0', to_excl: '7.0.14' }, { from: '7.2.0', to_excl: '7.2.8' }] }], ...o });
+
+test('remediation: one line per device, on its own branch', () => {
+  const [d1, d2] = devs({}, { Device: 'fw2', 'Current version': 'v7.2.5 build1517' });
+  assert.equal(V.remediation(twoBranch(), d1), 'Upgrade FortiOS 7.0.12 → 7.0.14 or later');
+  assert.equal(V.remediation(twoBranch(), d2), 'Upgrade FortiOS 7.2.5 → 7.2.8 or later');
+});
+
+test('remediation: unknown version lists every fixed branch', () => {
+  const [d] = devs({ 'Current version': '' });
+  assert.equal(V.remediation(twoBranch(), d), 'Upgrade FortiOS to 7.0.14+ or 7.2.8+ (running version unknown)');
+});
+
+test('remediation: "up to and including" ranges', () => {
+  const [d] = devs({ 'Current version': '7.0.12' });
+  const a = fortiAdv({ affected: [{ product: 'FortiOS', versions: [{ from: '7.0.0', to_incl: '7.0.13' }] }] });
+  assert.equal(V.remediation(a, d), 'Upgrade FortiOS 7.0.12 → a release newer than 7.0.13');
+});
+
+test('remediation: falls back to the vendor solution text, then a generic line', () => {
+  const [d] = devs({});
+  const noRange = fortiAdv({ affected: [], fix: 'Upgrade to FortiOS 7.0.14 or above.\nSee the advisory for details.' });
+  assert.equal(V.remediation(noRange, d), 'Upgrade to FortiOS 7.0.14 or above.');
+  assert.equal(V.remediation(fortiAdv({ affected: [] }), d), 'Apply the fixed release from the vendor advisory');
+});
+
+test('advisoryFix: short summary for the row', () => {
+  assert.equal(V.advisoryFix(twoBranch()), 'FortiOS → 7.0.14+ · 7.2.8+');
+  assert.equal(V.advisoryFix(fortiAdv({ affected: [], fix: 'Disable SSL-VPN until patched. More text.' })), 'Disable SSL-VPN until patched.');
+  assert.equal(V.advisoryFix(fortiAdv({ affected: [] })), null);
+});
+
+test('tickets carry each device its own upgrade line', () => {
+  const d = devs({ Client: 'Client B', 'Current version': '7.0.10' });
+  const a = twoBranch();
+  const [t] = V.clientTickets(a, V.matchAdvisory(a, d), (k) => k);
+  assert.match(t.body, /fw01 .* version 7\.0\.10 → upgrade to 7\.0\.14 or later/);
+});
+
+const WATCH = { vendors: { Citrix: ['NetScaler', 'Cloud Software Group'] } };
+const ctx = { id: 'CVE-2026-9999', vendor: 'citrix', products: ['NetScaler ADC'], affected: [], kev: true, cvss: 9.3 };
+
+test('watch list: same merge as the collector', () => {
+  const vm = V.mergeWatch(VMAP, WATCH);
+  assert.equal(V.normalizeVendor('Citrix Systems, Inc.', vm), 'citrix');
+  assert.equal(V.normalizeVendor('NetScaler', vm), 'citrix');
+  assert.equal(vm.vendors.citrix.label, 'Citrix');
+  assert.equal(vm.vendors.citrix.watch, true);
+  assert.equal(VMAP.vendors.citrix, undefined);          // original map untouched
+  assert.equal(V.mergeWatch(VMAP, 'garbage'), VMAP);
+});
+
+test('watched vendor with no devices: shows as Watched and still alerts', () => {
+  const vm = V.mergeWatch(VMAP, WATCH);
+  const mm = V.matchAdvisory(ctx, devs({}), vm);
+  assert.equal(mm.confidence, 'Watched');
+  assert.equal(mm.devices.length, 0);
+  assert.equal(V.isAlert(ctx, mm), true);
+  const mild = { ...ctx, kev: false, cvss: 7.5 };
+  assert.equal(V.isAlert(mild, V.matchAdvisory(mild, [], vm)), false);
+});
+
+test('watched vendor that is in the tracker matches normally', () => {
+  const vm = V.mergeWatch(VMAP, WATCH);
+  const d = V.loadInventory([row({ Manufacturer: 'Citrix', 'Device Type': 'Load balancer', Model: 'NetScaler ADC VPX', 'Current version': '14.1' })], vm).devices;
+  const mm = V.matchAdvisory(ctx, d, vm);
+  assert.equal(mm.confidence, 'Likely');
+  assert.equal(mm.devices.length, 1);
+});

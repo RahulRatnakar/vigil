@@ -159,7 +159,7 @@ function start() {
     if (!per.size) for (const a of S.advisories) if (a.vendor) { if (!per.has(a.vendor)) per.set(a.vendor, { n: 0 }); per.get(a.vendor).n++; }
     const keys = [...per.keys()].sort((a, b) => per.get(b).n - per.get(a).n);
     const maxN = Math.max(1, ...keys.map((k) => per.get(k).n));
-    const open = S.advisories.filter((a) => !S.reviewed.has(a.id) && A.m(a).confidence);
+    const open = S.advisories.filter((a) => !S.reviewed.has(a.id) && A.relevant(a));
     keys.forEach((k, i) => {
       const mine = open.filter((a) => a.vendor === k);
       const worst = mine.some((a) => a.kev) ? 'kev' : mine.reduce((w, a) => ((SEV[a.severity] || 0) > (SEV[w] || 0) ? a.severity : w), '');

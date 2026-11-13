@@ -29,7 +29,8 @@ def notify(new_advisories, env, post, vmap=None):
     if not url or env.get('VIGIL_TEAMS', '').lower() != 'on':
         return 0
     if vmap is None:
-        vmap = json.load(open(os.path.join(HERE, 'vendors.json'), encoding='utf-8'))
+        from vendors import load_vmap
+        vmap = load_vmap(HERE)
     hits = [a for a in new_advisories if is_alert(a)]
     if hits:
         post(url, card(hits, vmap))

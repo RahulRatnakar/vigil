@@ -92,7 +92,10 @@
       if (!boot || bootRun.stop) return;
       requestAnimationFrame(draw);
       const t = (now - t0b) / 1000;
-      const { g, w, h } = fit(cv), cx = w / 2, cy = h / 2, u = Math.min(w, h) / 620;
+      // drawn at 1:1 pixels and without blur filters: this canvas covers the whole screen
+      const rc = cv.getBoundingClientRect(), w = Math.round(rc.width), h = Math.round(rc.height);
+      if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+      const g = cv.getContext('2d'), cx = w / 2, cy = h / 2, u = Math.min(w, h) / 620;
       g.clearRect(0, 0, w, h);
       const col = '45,226,200';
       // rings assemble one by one, alternate directions, and lock with a click
@@ -100,17 +103,26 @@
         const start = 0.15 + i * 0.32, k = Math.max(0, Math.min(1, (t - start) / 0.55)); if (!k) continue;
         const r = (70 + i * 42) * u, dir = i % 2 ? -1 : 1, rot = dir * t * (0.25 + i * 0.07), e = 1 - Math.pow(1 - k, 3);
         g.save(); g.translate(cx, cy); g.rotate(rot);
-        g.strokeStyle = `rgba(${col},${0.25 + 0.5 * e})`; g.lineWidth = i === 0 ? 2.5 : 1.4; g.shadowColor = `rgba(${col},.9)`; g.shadowBlur = 10;
         g.setLineDash(i % 2 ? [] : [14 * u, 8 * u]);
-        g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2 * e); g.stroke();
+        // glow = a wide faint stroke under a thin bright one (much cheaper than shadowBlur)
+        g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2 * e);
+        g.strokeStyle = `rgba(${col},${0.12 * e})`; g.lineWidth = 7; g.stroke();
+        g.strokeStyle = `rgba(${col},${0.3 + 0.55 * e})`; g.lineWidth = i === 0 ? 2.5 : 1.4; g.stroke();
         g.setLineDash([]);
-        if (i % 2) {
+        if (i % 2) {                                   // all tick marks in a single path
+          g.beginPath();
           for (let a = 0; a < 72 * e; a++) {
-            const ang = (a / 72) * Math.PI * 2, l = a % 6 ? 4 : 10;
-            g.beginPath(); g.moveTo(Math.cos(ang) * r, Math.sin(ang) * r); g.lineTo(Math.cos(ang) * (r + l * u), Math.sin(ang) * (r + l * u)); g.stroke();
+            const ang = (a / 72) * Math.PI * 2, l = a % 6 ? 4 : 10, ca = Math.cos(ang), sa = Math.sin(ang);
+            g.moveTo(ca * r, sa * r); g.lineTo(ca * (r + l * u), sa * (r + l * u));
           }
+          g.lineWidth = 1.2; g.strokeStyle = `rgba(${col},${0.55 * e})`; g.stroke();
         }
-        if (i === 3 || i === 5) { g.lineWidth = 5; g.strokeStyle = `rgba(${col},.85)`; for (const a0 of [0.2, 2.3, 4.4]) { g.beginPath(); g.arc(0, 0, r + 6 * u, a0, a0 + 0.55 * e); g.stroke(); } }
+        if (i === 3 || i === 5) {
+          g.beginPath();
+          for (const a0 of [0.2, 2.3, 4.4]) { g.moveTo(Math.cos(a0) * (r + 6 * u), Math.sin(a0) * (r + 6 * u)); g.arc(0, 0, r + 6 * u, a0, a0 + 0.55 * e); }
+          g.strokeStyle = `rgba(${col},.18)`; g.lineWidth = 11; g.stroke();
+          g.strokeStyle = `rgba(${col},.9)`; g.lineWidth = 4; g.stroke();
+        }
         g.restore();
         if (k >= 1 && !locked.has(i)) { locked.add(i); if (s) s.lock(i); }
       }
@@ -164,7 +176,7 @@
     const open = S.advisories.filter((a) => !S.reviewed.has(a.id));
     const alerts = open.filter(A.alerting).sort((x, y) => (stamp(y) > stamp(x) ? 1 : -1));
     if (alerts.length) return alerts[0];
-    const ours = open.filter((a) => A.m(a).confidence).sort((x, y) => (y.cvss || 0) - (x.cvss || 0));
+    const ours = open.filter((a) => A.relevant(a)).sort((x, y) => (y.cvss || 0) - (x.cvss || 0));
     return ours[0] || null;
   }
   function shapeFor(adv) {
@@ -272,7 +284,7 @@
     const cv = $('#cloud'), W = cv.clientWidth || 400, H = cv.clientHeight || 260;
     const maxN = Math.max(1, ...[...per.values()].map((p) => p.n));
     nodes = [...per].map(([k, p], i) => {
-      const open = S.advisories.filter((a) => a.vendor === k && A.m(a).confidence && !S.reviewed.has(a.id));
+      const open = S.advisories.filter((a) => a.vendor === k && A.relevant(a) && !S.reviewed.has(a.id));
       const worst = open.some((a) => a.kev) ? 'kev' : open.reduce((w, a) => ((SEV[a.severity] || 0) > (SEV[w] || 0) ? a.severity : w), '');
       const color = worst === 'kev' || worst === 'critical' ? C.red : worst === 'high' ? C.amber : C.teal;
       const r = 10 + 34 * Math.sqrt(p.n / maxN) * Math.min(1, W / 520);

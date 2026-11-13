@@ -82,7 +82,18 @@
   }
 
   // does advisory product p describe this device? Compares against Device Type + Model, using vendors.json product_aliases
+  // the same product/model pair comes up thousands of times, so answers are remembered
+  const hitCache = new WeakMap(), NOVMAP = {};
   function productHits(p, dev, vmap) {
+    const store = vmap || NOVMAP;
+    let c = hitCache.get(store);
+    if (!c) { c = new Map(); hitCache.set(store, c); }
+    const key = p + '\u0001' + dev.type + '\u0001' + dev.model;
+    let v = c.get(key);
+    if (v === undefined) { v = productHitsRaw(p, dev, vmap); c.set(key, v); }
+    return v;
+  }
+  function productHitsRaw(p, dev, vmap) {
     const n = norm(p);
     if (!n) return false;
     const pa = (vmap && vmap.product_aliases) || {};
@@ -132,15 +143,35 @@
 
   const RANK = { Confirmed: 3, Likely: 2, 'Vendor only': 1 };
 
+  // devices indexed by vendor, then grouped by identical type/model/version: one decision per group
+  const devIndex = new WeakMap();
+  function groupsFor(devices, vendor) {
+    let idx = devIndex.get(devices);
+    if (!idx) {
+      idx = new Map();
+      for (const d of devices) {
+        if (!idx.has(d.vendor)) idx.set(d.vendor, new Map());
+        const g = idx.get(d.vendor), k = d.type + '\u0001' + d.model + '\u0001' + d.version;
+        if (!g.has(k)) g.set(k, []);
+        g.get(k).push(d);
+      }
+      devIndex.set(devices, idx);
+    }
+    return idx.get(vendor) || new Map();
+  }
+
   function matchAdvisory(adv, devices, vmap) {
     vmap = vmap || root.VIGIL_VENDORS;
     const rated = [];
-    for (const d of devices || []) {
-      if (!adv.vendor || d.vendor !== adv.vendor) continue;
-      const c = rate(adv, d, vmap);
-      if (c) rated.push([d, c]);
+    if (adv.vendor && devices && devices.length) {
+      for (const group of groupsFor(devices, adv.vendor).values()) {
+        const c = rate(adv, group[0], vmap);
+        if (c) for (const d of group) rated.push([d, c]);
+      }
     }
-    const best = rated.reduce((b, [, c]) => (!b || RANK[c] > RANK[b] ? c : b), null);
+    let best = rated.reduce((b, [, c]) => (!b || RANK[c] > RANK[b] ? c : b), null);
+    // a vendor on the watch list with nothing in the tracker still shows up
+    if (!best && adv.vendor && vmap && vmap.vendors && vmap.vendors[adv.vendor] && vmap.vendors[adv.vendor].watch) best = 'Watched';
     // product-level matches (Confirmed + Likely) list together; "Vendor only" devices only when nothing better exists
     const list = rated.filter(([, c]) => (RANK[best] >= 2 ? RANK[c] >= 2 : true)).map(([d]) => d);
     const uniq = (k) => [...new Set(list.map((d) => d[k]).filter(Boolean))].sort();
@@ -149,8 +180,72 @@
 
   function isAlert(adv, match, rule) {
     rule = rule || { kev: true, cvssMin: 9.0 };
-    if (!match || !match.confidence || !match.devices.length) return false;
+    if (!match || !match.confidence) return false;
+    if (match.confidence !== 'Watched' && !match.devices.length) return false;
     return (rule.kev && !!adv.kev) || (adv.cvss || 0) >= rule.cvssMin;
+  }
+
+  /* ---------- remediation: "upgrade from this to that" ---------- */
+  function firstLine(text) {
+    const line = String(text || '').split(/\r?\n/).map((s) => s.trim()).find(Boolean) || '';
+    const m = /^(.*?[.!?])(\s|$)/.exec(line);                 // first sentence (version dots don't end it)
+    return (m ? m[1] : line).slice(0, 160);
+  }
+  const bound = (r) => (r.to_excl ? { v: r.to_excl, label: r.to_excl + '+', target: r.to_excl + ' or later' }
+    : r.to_incl && r.to_incl !== r.from ? { v: r.to_incl, label: '> ' + r.to_incl, target: 'a release newer than ' + r.to_incl } : null);
+  function fixRanges(adv, products) {
+    const ent = (adv.affected || []).filter((a) => !products || products.includes(a.product));
+    return ent.flatMap((a) => (a.versions || []).map((v) => ({ p: a.product, ...v }))).filter(bound);
+  }
+  // per device: {p, ver, target} when version data allows, else {text}
+  function fixFor(adv, dev, vmap) {
+    vmap = vmap || root.VIGIL_VENDORS;
+    const all = [...new Set((adv.affected || []).map((a) => a.product).filter(Boolean))];
+    const hit = all.filter((p) => productHits(p, dev, vmap));
+    const ranges = fixRanges(adv, hit.length ? hit : null);
+    if (!ranges.length) return { text: adv.fix ? firstLine(adv.fix) : 'Apply the fixed release from the vendor advisory' };
+    const ver = parseVersion(dev.version);
+    if (ver) {
+      let r = ranges.find((x) => inRange(dev.version, x) === true);
+      if (!r) r = ranges.filter((x) => { const c = cmpVersion(dev.version, bound(x).v); return c != null && c < 0; })
+        .sort((a, b) => cmpVersion(bound(a).v, bound(b).v))[0];
+      if (r) return { p: r.p, ver: ver.join('.'), target: bound(r).target };
+    }
+    const labels = [...new Set(ranges.map((x) => bound(x).label))];
+    return { p: ranges[0].p, ver: null, target: labels.join(' or ') };
+  }
+  function remediation(adv, dev, vmap) {
+    const f = fixFor(adv, dev, vmap);
+    if (f.text) return f.text;
+    return f.ver ? `Upgrade ${f.p} ${f.ver} → ${f.target}` : `Upgrade ${f.p} to ${f.target} (running version unknown)`;
+  }
+  // one short line for the advisory row
+  function advisoryFix(adv) {
+    const ranges = fixRanges(adv, null);
+    if (ranges.length) {
+      const byP = new Map();
+      for (const r of ranges) { if (!byP.has(r.p)) byP.set(r.p, []); const l = bound(r).label; if (!byP.get(r.p).includes(l)) byP.get(r.p).push(l); }
+      return [...byP].slice(0, 2).map(([p, ls]) => `${p} → ${ls.slice(0, 4).join(' · ')}`).join('; ');
+    }
+    return adv.fix ? firstLine(adv.fix) : null;
+  }
+
+  // same rules as collector/vendors.py merge_watch(); returns a new map, never changes the original
+  function mergeWatch(vmap, watch) {
+    const vs = watch && typeof watch === 'object' ? watch.vendors : null;
+    if (!vs || typeof vs !== 'object' || Array.isArray(vs)) return vmap;
+    const out = JSON.parse(JSON.stringify(vmap));
+    for (const [label, names] of Object.entries(vs)) {
+      const k = String(label).toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!k) continue;
+      let v = out.vendors[k];
+      if (!v) v = out.vendors[k] = { label: String(label).trim(), aliases: [], cve_names: [], feeds: [], products: [], watch: true };
+      for (const n of [String(label), ...(Array.isArray(names) ? names : []).map(String).filter((x) => x.trim())]) {
+        if (!v.aliases.includes(n)) v.aliases.push(n);
+        if (!v.cve_names.includes(n)) v.cve_names.push(n);
+      }
+    }
+    return out;
   }
 
   // one ticket per client: each lists only that client's devices, ready to paste into that client's ticket
@@ -177,9 +272,13 @@
         `Vendor / product: ${vendor}`,
         `Match: ${match.confidence}`, '',
         `Affected devices for ${client} (${devices.length}):`,
-        ...devices.map((d) => `- ${d.device || '(unnamed)'} · ${[d.type, d.model].filter(Boolean).join(' ') || 'device'} · version ${d.version || 'unknown'}`), '',
+        ...devices.map((d) => {
+          const f = fixFor(adv, d);
+          const todo = f.text ? f.text : `upgrade to ${f.target}`;
+          return `- ${d.device || '(unnamed)'} · ${[d.type, d.model].filter(Boolean).join(' ') || 'device'} · version ${d.version || 'unknown'} → ${todo}`;
+        }), '',
         'Recommended action:',
-        ...(fixes.length ? fixes.map((f) => `- ${f}`) : ['- Apply the fixed release or workaround from the vendor advisory below.']),
+        ...(fixes.length ? fixes.map((f) => `- ${f}`) : [`- ${adv.fix ? firstLine(adv.fix) : 'Apply the fixed release or workaround from the vendor advisory below.'}`]),
         '- Confirm the running version on each device after the change.',
       ];
       if (urls.length) lines.push('', 'Vendor advisory:', ...urls);
@@ -187,6 +286,6 @@
     });
   }
 
-  const api = { norm, normalizeVendor, parseVersion, cmpVersion, loadInventory, matchAdvisory, isAlert, clientTickets };
+  const api = { norm, normalizeVendor, parseVersion, cmpVersion, loadInventory, matchAdvisory, isAlert, clientTickets, mergeWatch, remediation, advisoryFix };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.VIGIL = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

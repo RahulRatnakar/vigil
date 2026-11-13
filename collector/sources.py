@@ -77,7 +77,11 @@ def parse_cve_record(rec, ctx):
             products.append(a['product'])
             affected.append({'product': a['product'], 'versions': _versions(a.get('versions'))})
     desc = next((d.get('value', '') for d in cna.get('descriptions', []) if d.get('lang', 'en').startswith('en')), '')
+    # the vendor's own remediation text, used when version ranges aren't published
+    eng = lambda items: next((' '.join(str(x.get('value', '')).split('\n')).strip()[:400] for x in items or [] if str(x.get('lang', 'en')).startswith('en') and x.get('value')), None)
+    sol = next((str(x['value']).strip()[:400] for x in cna.get('solutions') or [] if str(x.get('lang', 'en')).startswith('en') and x.get('value')), None)
     return {'id': cid, 'title': cna.get('title') or desc[:160], 'vendor': vendor, 'products': products, 'affected': affected,
+            'fix': sol, 'workaround': eng(cna.get('workarounds')),
             'cvss': _max_cvss([cna.get('metrics')] + [a.get('metrics') for a in cont.get('adp', [])]),
             'published': ctx['parse'](meta.get('datePublished')), 'modified': ctx['parse'](meta.get('dateUpdated')),
             'urls': [r['url'] for r in cna.get('references', [])[:5] if r.get('url')], 'sources': ['cvelist']}
@@ -143,14 +147,24 @@ def parse_nvd_item(item, ctx):
 
 def nvd(ctx):
     now = ctx['now']
-    start = now - timedelta(days=90) if not ctx['last'] else max(ctx['last'] - timedelta(minutes=15), now - timedelta(days=7))
+    # window starts at NVD's own last success, so a failed first back-fill is retried in full next run
+    last = ctx['since']('nvd') if 'since' in ctx else ctx['last']
+    start = now - timedelta(days=90) if not last else max(last - timedelta(minutes=15), now - timedelta(days=7))
     fmt = lambda d: quote(d.strftime('%Y-%m-%dT%H:%M:%S.000') + '+00:00', safe=':.')
     out, index, total, pages = [], 0, 1, 0
-    # NVD allows 120-day windows; 90 days fits in one window
-    while index < total and pages < 60:
+    # NVD allows 120-day windows; 90 days fits in one window. Smaller pages answer faster.
+    while index < total and pages < 120:
         if pages:
             ctx['sleep'](ctx['nvd_delay'])
-        page = _json(ctx, f'{NVD_URL}?lastModStartDate={fmt(start)}&lastModEndDate={fmt(now)}&startIndex={index}&resultsPerPage=2000')
+        url = f'{NVD_URL}?lastModStartDate={fmt(start)}&lastModEndDate={fmt(now)}&startIndex={index}&resultsPerPage=1000'
+        for attempt in range(3):             # NVD is often slow or briefly overloaded
+            try:
+                page = _json(ctx, url)
+                break
+            except Exception:
+                if attempt == 2:
+                    raise
+                ctx['sleep'](max(ctx['nvd_delay'], 6) * (attempt + 1))
         total = page.get('totalResults', 0)
         items = page.get('vulnerabilities', [])
         out += [parse_nvd_item(i, ctx) for i in items]

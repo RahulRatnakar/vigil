@@ -71,7 +71,7 @@ class TestCollector(unittest.TestCase):
         old = {'id': 'CVE-2026-2222', 'title': 'old', 'vendor': 'cisco', 'products': [], 'affected': [], 'cvss': 9.1, 'severity': 'critical',
                'kev': False, 'epss': None, 'published': iso(NOW - timedelta(days=2)), 'modified': iso(NOW - timedelta(days=2)), 'urls': [], 'sources': ['nvd']}
         prev = {'last_run': iso(NOW - timedelta(minutes=15)), 'sources': {}, 'advisories': [old]}
-        out = run(NOW, prev, Fetcher(base_routes(), fail=['services.nvd.nist.gov']), VMAP)
+        out = run(NOW, prev, Fetcher(base_routes(), fail=['services.nvd.nist.gov']), VMAP, sleep=lambda s: None)
         self.assertEqual(out['sources']['nvd']['status'], 'stale')
         self.assertTrue(out['sources']['nvd']['error'])
         kept = [a for a in out['advisories'] if a['id'] == 'CVE-2026-2222']
@@ -121,6 +121,68 @@ class TestCollector(unittest.TestCase):
         text = json.dumps(run(NOW, {}, f, VMAP)).lower()
         for key in ('"client"', '"device"', '"ip"', '"serial"'):
             self.assertNotIn(key, text)
+
+    def test_vendor_solution_text_is_kept(self):
+        rec = cve_record('CVE-2026-8888')
+        rec['containers']['cna']['solutions'] = [{'lang': 'en', 'value': 'Upgrade to FortiOS 7.0.14 or above.\nOther notes.'}]
+        rec['containers']['cna']['workarounds'] = [{'lang': 'en', 'value': 'Disable SSL-VPN.'}]
+        f = Fetcher(base_routes(**{'deltaLog': delta('CVE-2026-8888'), 'CVE-2026-8888.json': rec}))
+        a = [x for x in run(NOW, {}, f, VMAP)['advisories'] if x['id'] == 'CVE-2026-8888'][0]
+        self.assertTrue(a['fix'].startswith('Upgrade to FortiOS 7.0.14 or above.'))
+        self.assertLessEqual(len(a['fix']), 400)
+        self.assertEqual(a['workaround'], 'Disable SSL-VPN.')
+
+    def test_fix_fields_exist_without_solution(self):
+        f = Fetcher(base_routes(**{'deltaLog': delta('CVE-2026-8889'), 'CVE-2026-8889.json': cve_record('CVE-2026-8889')}))
+        a = [x for x in run(NOW, {}, f, VMAP)['advisories'] if x['id'] == 'CVE-2026-8889'][0]
+        self.assertIsNone(a['fix'])
+        self.assertIsNone(a['workaround'])
+
+
+class TestNvdCursor(unittest.TestCase):
+    """NVD keeps its own 'last success' so a failed first back-fill is retried instead of shrinking to 7 days."""
+    NO_SLEEP = staticmethod(lambda s: None)
+
+    def nvd_start(self, prev, fetcher=None):
+        f = fetcher or Fetcher(base_routes())
+        out = run(NOW, prev, f, VMAP, sleep=self.NO_SLEEP)
+        return [u for u in f.urls if 'services.nvd.nist.gov' in u][0], out
+
+    def test_backfill_repeats_until_nvd_first_succeeds(self):
+        prev = {'last_run': iso(NOW - timedelta(minutes=15)), 'advisories': [],
+                'sources': {'nvd': {'status': 'stale', 'checked': iso(NOW - timedelta(minutes=15)), 'error': 'TimeoutError'}}}
+        url, _ = self.nvd_start(prev)
+        self.assertIn('lastModStartDate=' + (NOW - timedelta(days=90)).strftime('%Y-%m-%dT%H:%M'), url)
+
+    def test_window_starts_at_last_success(self):
+        ok = NOW - timedelta(hours=1)
+        prev = {'last_run': iso(NOW - timedelta(minutes=15)), 'advisories': [],
+                'sources': {'nvd': {'status': 'ok', 'checked': iso(ok), 'error': None, 'last_ok': iso(ok)}}}
+        url, out = self.nvd_start(prev)
+        self.assertIn('lastModStartDate=' + (ok - timedelta(minutes=15)).strftime('%Y-%m-%dT%H:%M'), url)
+        self.assertTrue(out['sources']['nvd']['last_ok'].startswith(NOW.strftime('%Y-%m-%dT%H:%M')))
+
+    def test_failure_keeps_last_success(self):
+        ok = iso(NOW - timedelta(hours=1))
+        prev = {'last_run': iso(NOW - timedelta(minutes=15)), 'advisories': [],
+                'sources': {'nvd': {'status': 'ok', 'checked': ok, 'error': None, 'last_ok': ok}}}
+        out = run(NOW, prev, Fetcher(base_routes(), fail=['services.nvd.nist.gov']), VMAP, sleep=self.NO_SLEEP)
+        self.assertEqual(out['sources']['nvd']['status'], 'stale')
+        self.assertEqual(out['sources']['nvd']['last_ok'], ok)
+
+    def test_slow_nvd_is_retried(self):
+        calls = {'n': 0}
+        inner = Fetcher(base_routes())
+
+        def flaky(url):
+            if 'services.nvd.nist.gov' in url:
+                calls['n'] += 1
+                if calls['n'] <= 2:
+                    raise TimeoutError('The read operation timed out')
+            return inner(url)
+        out = run(NOW, {}, flaky, VMAP, sleep=self.NO_SLEEP)
+        self.assertEqual(out['sources']['nvd']['status'], 'ok')
+        self.assertEqual(calls['n'], 3)
 
 
 if __name__ == '__main__':

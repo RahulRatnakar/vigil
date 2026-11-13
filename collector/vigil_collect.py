@@ -4,6 +4,7 @@ import argparse, json, os, sys, time, urllib.request
 from datetime import datetime, timedelta, timezone
 
 import sources
+from vendors import load_vmap
 
 RETAIN_DAYS = 90
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -30,7 +31,7 @@ def severity(score):
 
 def blank(aid):
     return {'id': aid, 'title': '', 'vendor': None, 'products': [], 'affected': [], 'cvss': None, 'severity': None, 'kev': False,
-            'epss': None, 'published': None, 'modified': None, 'urls': [], 'sources': []}
+            'epss': None, 'published': None, 'modified': None, 'urls': [], 'sources': [], 'fix': None, 'workaround': None}
 
 
 def merge(a, b):
@@ -38,6 +39,8 @@ def merge(a, b):
     a = dict(a) if a else blank(b['id'])
     a['title'] = a['title'] or b.get('title') or ''
     a['vendor'] = a['vendor'] or b.get('vendor')
+    a['fix'] = a.get('fix') or b.get('fix')
+    a['workaround'] = a.get('workaround') or b.get('workaround')
     for k in ('products', 'urls', 'sources'):
         a[k] = list(dict.fromkeys(a[k] + (b.get(k) or [])))
     a['urls'] = a['urls'][:8]
@@ -61,14 +64,24 @@ def run(now, prev, fetch, vmap, sleep=time.sleep, nvd_delay=6.0):
     ctx = {'now': now, 'last': parse_dt(prev.get('last_run')), 'fetch': fetch, 'vmap': vmap, 'sleep': sleep, 'nvd_delay': nvd_delay,
            'kev_ids': set(), 'adv': adv, 'iso': iso, 'parse_dt': lambda s: parse_dt(s) or now,
            'parse': lambda s: iso(parse_dt(s)) if s else None}
+    prev_src = prev.get('sources', {})
+
+    def since(sid):
+        """When this source last succeeded. Unknown history (older files) falls back to last_run."""
+        if sid not in prev_src:
+            return ctx['last']
+        p = prev_src[sid]
+        return parse_dt(p.get('last_ok') or (p.get('checked') if p.get('status') == 'ok' else None))
+    ctx['since'] = since
     removed = set()
     for sid, fn in sources.ORDER:
+        last_ok = (prev_src.get(sid) or {}).get('last_ok')
         try:
             parts = fn(ctx)
         except Exception as e:       # one broken source never stops the run; its old data stays
-            status[sid] = {'status': 'stale', 'checked': iso(now), 'error': f'{type(e).__name__}: {e}'[:200]}
+            status[sid] = {'status': 'stale', 'checked': iso(now), 'error': f'{type(e).__name__}: {e}'[:200], 'last_ok': last_ok}
             continue
-        status[sid] = {'status': 'ok', 'checked': iso(now), 'error': None}
+        status[sid] = {'status': 'ok', 'checked': iso(now), 'error': None, 'last_ok': iso(now)}
         for p in parts:
             if not p.get('id'):
                 continue
@@ -83,6 +96,7 @@ def run(now, prev, fetch, vmap, sleep=time.sleep, nvd_delay=6.0):
     for a in adv.values():
         a['kev'] = a['kev'] or a['id'] in ctx['kev_ids']
         a['severity'] = severity(a['cvss'])
+        a.setdefault('fix', None); a.setdefault('workaround', None)
         newest = max(d for d in (a.get('published'), a.get('modified'), cutoff) if d)
         # ours, or actively exploited anywhere; and touched within the retention window
         if (a['vendor'] or a['kev']) and newest > cutoff:
@@ -95,7 +109,8 @@ def http_fetch(url):
     headers = {'User-Agent': 'VIGIL-collector (github.com; public advisories)'}
     if 'nvd.nist.gov' in url and os.environ.get('NVD_API_KEY'):
         headers['apiKey'] = os.environ['NVD_API_KEY']
-    with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=60) as r:
+    timeout = 150 if 'nvd.nist.gov' in url else 60        # NVD pages can take over a minute
+    with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout) as r:
         return r.read()
 
 
@@ -113,7 +128,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description='Collect public advisories for VIGIL')
     ap.add_argument('--dry-run', action='store_true', help='print a summary, write nothing')
     args = ap.parse_args(argv)
-    vmap = json.load(open(os.path.join(HERE, 'vendors.json'), encoding='utf-8'))
+    vmap = load_vmap(HERE)
     prev = load_prev(OUT)
     out = run(datetime.now(timezone.utc), prev, http_fetch, vmap, nvd_delay=0.6 if os.environ.get('NVD_API_KEY') else 6.0)
     for sid, s in out['sources'].items():
@@ -127,6 +142,13 @@ def main(argv=None):
         old = {a['id'] for a in prev.get('advisories', [])}
         with open(os.path.join(HERE, '..', 'site', 'data', '.new.json'), 'w', encoding='utf-8') as f:
             json.dump([a for a in out['advisories'] if a['id'] not in old], f)
+        # the page merges the same watch list, so labels and inventory matching agree with the collector
+        try:
+            watch = json.load(open(os.path.join(HERE, 'watch.json'), encoding='utf-8'))
+        except (OSError, ValueError):
+            watch = {'vendors': {}}
+        with open(os.path.join(HERE, '..', 'site', 'data', 'watch.json'), 'w', encoding='utf-8') as f:
+            json.dump(watch, f)
     return 0
 
 

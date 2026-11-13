@@ -1,0 +1,6 @@
+{
+  "_help": "Extra vendors VIGIL watches even when they are not in the inventory tracker. Format: \"Name\": [\"other names it goes by\"]. Edit on GitHub, commit, and the next run (within 15 min) starts collecting them.",
+  "vendors": {
+    "Citrix": ["NetScaler", "Cloud Software Group", "Citrix Systems"]
+  }
+}
