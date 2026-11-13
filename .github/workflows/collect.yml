@@ -1,0 +1,59 @@
+name: VIGIL collect
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: vigil
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Test
+        run: python -m unittest discover -s collector/tests
+
+      # the previous run's data lives on the published site, so nothing is committed back to the repo
+      - name: Restore previous advisories
+        run: |
+          mkdir -p site/data
+          curl -sfL "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/advisories.json" -o site/data/advisories.json \
+            || { rm -f site/data/advisories.json; echo "no previous data: first run back-fills 90 days"; }
+
+      - name: Collect advisories
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: python collector/vigil_collect.py
+
+      - name: Teams alert (off unless VIGIL_TEAMS=on)
+        env:
+          VIGIL_TEAMS_URL: ${{ secrets.VIGIL_TEAMS_URL }}
+          VIGIL_TEAMS: ${{ vars.VIGIL_TEAMS }}
+        run: python collector/teams.py
+
+      - name: Publish vendor map
+        run: cp collector/vendors.json site/data/vendors.json
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
