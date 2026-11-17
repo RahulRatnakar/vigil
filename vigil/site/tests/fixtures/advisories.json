@@ -1,0 +1,248 @@
+{
+ "generated": "2026-11-13T14:39:16Z",
+ "last_run": "2026-11-13T14:39:16Z",
+ "sources": {
+  "kev": {
+   "status": "ok",
+   "checked": "2026-11-13T14:39:16Z",
+   "error": null
+  },
+  "cvelist": {
+   "status": "ok",
+   "checked": "2026-11-13T14:39:16Z",
+   "error": null
+  },
+  "nvd": {
+   "status": "stale",
+   "checked": "2026-11-13T14:39:16Z",
+   "error": "HTTPError: 503 Service Unavailable"
+  },
+  "fortinet": {
+   "status": "ok",
+   "checked": "2026-11-13T14:39:16Z",
+   "error": null
+  },
+  "cisco": {
+   "status": "ok",
+   "checked": "2026-11-13T14:39:16Z",
+   "error": null
+  },
+  "paloalto": {
+   "status": "ok",
+   "checked": "2026-11-13T14:39:16Z",
+   "error": null
+  },
+  "microsoft": {
+   "status": "ok",
+   "checked": "2026-11-13T14:39:16Z",
+   "error": null
+  },
+  "sophos": {
+   "status": "ok",
+   "checked": "2026-11-13T14:39:16Z",
+   "error": null
+  },
+  "epss": {
+   "status": "ok",
+   "checked": "2026-11-13T14:39:16Z",
+   "error": null
+  }
+ },
+ "advisories": [
+  {
+   "title": "FortiOS SSL-VPN heap overflow allows remote code execution",
+   "vendor": "fortinet",
+   "products": [
+    "FortiOS"
+   ],
+   "affected": [
+    {
+     "product": "FortiOS",
+     "versions": [
+      {
+       "from": "7.0.0",
+       "to_excl": "7.0.14",
+       "to_incl": null
+      }
+     ]
+    }
+   ],
+   "cvss": 9.8,
+   "kev": true,
+   "epss": 0.91,
+   "published": "2026-11-13T13:45:16Z",
+   "modified": "2026-11-13T13:45:16Z",
+   "urls": [
+    "https://www.fortiguard.com/psirt/FG-IR-26-001",
+    "https://nvd.nist.gov/vuln/detail/CVE-2026-24001"
+   ],
+   "sources": [
+    "kev",
+    "cvelist",
+    "fortinet"
+   ],
+   "id": "CVE-2026-24001",
+   "severity": "critical"
+  },
+  {
+   "title": "Meraki MX dashboard authentication bypass",
+   "vendor": "cisco",
+   "products": [
+    "Meraki MX"
+   ],
+   "affected": [],
+   "cvss": 8.6,
+   "kev": false,
+   "epss": null,
+   "published": "2026-11-13T09:45:16Z",
+   "modified": "2026-11-13T11:45:16Z",
+   "urls": [
+    "https://sec.cloudapps.cisco.com/security/center/publicationListing.x"
+   ],
+   "sources": [
+    "cisco",
+    "nvd"
+   ],
+   "id": "CVE-2026-23950",
+   "severity": "high"
+  },
+  {
+   "title": "iDRAC9 privilege escalation",
+   "vendor": "dell",
+   "products": [
+    "iDRAC9"
+   ],
+   "affected": [
+    {
+     "product": "iDRAC9",
+     "versions": [
+      {
+       "from": null,
+       "to_excl": "7.10.50",
+       "to_incl": null
+      }
+     ]
+    }
+   ],
+   "cvss": 7.8,
+   "kev": false,
+   "epss": null,
+   "published": "2026-11-12T08:45:16Z",
+   "modified": "2026-11-12T08:45:16Z",
+   "urls": [
+    "https://www.dell.com/support/security/"
+   ],
+   "sources": [
+    "cvelist"
+   ],
+   "id": "CVE-2026-23811",
+   "severity": "high"
+  },
+  {
+   "title": "VMware ESXi VMX out-of-bounds write",
+   "vendor": "vmware",
+   "products": [
+    "ESXi"
+   ],
+   "affected": [
+    {
+     "product": "ESXi",
+     "versions": [
+      {
+       "from": "7.0",
+       "to_excl": "7.0.3.5",
+       "to_incl": null
+      }
+     ]
+    }
+   ],
+   "cvss": 9.3,
+   "kev": true,
+   "epss": null,
+   "published": "2026-11-11T12:45:16Z",
+   "modified": "2026-11-12T18:45:16Z",
+   "urls": [
+    "https://support.broadcom.com/"
+   ],
+   "sources": [
+    "kev",
+    "cvelist"
+   ],
+   "id": "CVE-2026-23700",
+   "severity": "critical"
+  },
+  {
+   "title": "UniFi Network Application command injection",
+   "vendor": "ubiquiti",
+   "products": [
+    "UniFi Network Application"
+   ],
+   "affected": [],
+   "cvss": 10,
+   "kev": false,
+   "epss": null,
+   "published": "2026-11-10T16:45:16Z",
+   "modified": "2026-11-10T16:45:16Z",
+   "urls": [
+    "https://community.ui.com/releases"
+   ],
+   "sources": [
+    "cvelist"
+   ],
+   "id": "CVE-2026-22000",
+   "severity": "critical"
+  },
+  {
+   "title": "Acme Toaster OS default credentials",
+   "vendor": null,
+   "products": [
+    "Toaster OS"
+   ],
+   "affected": [],
+   "cvss": 9.1,
+   "kev": true,
+   "epss": null,
+   "published": "2026-11-13T04:45:16Z",
+   "modified": "2026-11-13T04:45:16Z",
+   "urls": [
+    "https://nvd.nist.gov/vuln/detail/CVE-2026-21000"
+   ],
+   "sources": [
+    "kev"
+   ],
+   "id": "CVE-2026-21000",
+   "severity": "critical"
+  },
+  {
+   "title": "FortiWeb path traversal",
+   "vendor": "fortinet",
+   "products": [
+    "FortiWeb"
+   ],
+   "affected": [
+    {
+     "product": "FortiWeb",
+     "versions": [
+      {
+       "from": "7.0.0",
+       "to_excl": "7.0.9"
+      }
+     ]
+    }
+   ],
+   "cvss": 6.5,
+   "kev": false,
+   "epss": null,
+   "published": "2026-11-08T14:45:16Z",
+   "modified": "2026-11-08T14:45:16Z",
+   "urls": [
+    "https://www.fortiguard.com/psirt/FG-IR-26-002"
+   ],
+   "sources": [
+    "cvelist"
+   ],
+   "id": "CVE-2026-20500",
+   "severity": "medium"
+  }
+ ]
+}
