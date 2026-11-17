@@ -40,6 +40,15 @@ header{display:flex;align-items:center;gap:18px;padding:18px 0 10px;flex-wrap:wr
 .status .n{font-family:var(--f-mono);font-weight:600}
 .status.calm{color:var(--teal)} .status.warn{color:var(--amber)} .status.hot{color:var(--red);text-shadow:0 0 18px rgba(255,61,94,.45)}
 .meta{display:flex;gap:14px;align-items:center;color:var(--muted);font:12px var(--f-mono);flex-wrap:wrap}
+.gsearch{display:flex;align-items:center;gap:8px;background:rgba(5,12,18,.7);border:1px solid var(--line2);border-radius:10px;padding:0 10px;min-height:38px;width:min(340px,100%);transition:border-color .15s,box-shadow .15s}
+.gsearch:focus-within{border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-d)}
+.gsearch svg{width:16px;height:16px;color:var(--muted);flex:none}
+.gsearch input{flex:1;min-width:0;background:none;border:0;outline:none;padding:8px 0}
+.gsearch kbd{font:11px var(--f-mono);color:var(--muted);border:1px solid var(--line2);border-radius:5px;padding:1px 6px}
+.chip.ref{color:#c9e8ff;border-color:rgba(90,169,255,.55);background:rgba(90,169,255,.12)}
+.lookups{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+.empty-state p{margin:6px 0 0}
+@media (max-width:640px){.gsearch{order:3;width:100%}}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 8px var(--teal);margin-right:6px;vertical-align:1px}
 .dot.amber{background:var(--amber);box-shadow:0 0 8px var(--amber)} .dot.red{background:var(--red);box-shadow:0 0 8px var(--red)}
 nav{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;overflow-x:auto;scrollbar-width:none}
@@ -142,6 +151,8 @@ body.kev-open .core{background:radial-gradient(ellipse at 68% 55%,rgba(255,61,94
 .btn.on{background:var(--teal-d);border-color:var(--teal);color:var(--teal)}
 .btn.primary{background:var(--teal);color:#032;border-color:var(--teal);font-weight:600}
 .btn.danger:hover{border-color:var(--red);color:var(--red)}
+.btn.warn{border-color:var(--amber);color:var(--amber);animation:pulsebtn 1.6s ease-in-out infinite}
+@keyframes pulsebtn{50%{box-shadow:0 0 14px rgba(255,181,71,.45)}}
 .detail{grid-column:1/-1;border-top:1px solid var(--line);padding-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;font-size:13px}
 .detail h4{margin:0 0 6px;font:600 12px var(--f-display);letter-spacing:.18em;color:var(--muted);text-transform:uppercase}
 .detail ul{margin:0;padding-left:16px}
@@ -267,6 +278,11 @@ td.num{font-family:var(--f-mono);text-align:right} th.num{text-align:right}
       <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 29 27H3z" fill="none" stroke="#2de2c8" stroke-width="2.5"/><circle cx="16" cy="19" r="3" fill="#2de2c8"/></svg>VIGIL
     </div>
     <div id="status" class="status calm">Loading…</div>
+    <form class="gsearch" id="g-form" role="search" autocomplete="off">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M13 13l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input type="search" id="g-q" placeholder="Search CVE, SNWLID, product…" aria-label="Search all vulnerabilities">
+      <kbd>/</kbd>
+    </form>
     <div class="meta">
       <span id="feeds"></span>
       <span id="age"></span>
@@ -343,9 +359,10 @@ td.num{font-family:var(--f-mono);text-align:right} th.num{text-align:right}
         <h3>Alert rule</h3>
         <p>Alert when an advisory affects a vendor we have, and…</p>
         <label class="line"><input type="checkbox" id="s-kev"> it is on the exploited list (CISA KEV)</label>
+        <label class="line"><input type="checkbox" id="s-snwl"> it is any new SonicWall advisory (SNWLID), whatever its score</label>
         <label class="line">or its CVSS is at least <input type="number" id="s-cvss" min="0" max="10" step="0.1"></label>
         <h3 style="margin-top:8px">Signals</h3>
-        <label class="line"><input type="checkbox" id="s-sound"> Sound</label>
+        <div class="line"><label class="line"><input type="checkbox" id="s-sound"> Sound</label><button class="btn" id="s-sound-test" type="button">Test sound</button><span id="s-sound-st" style="color:var(--muted);font-size:13px"></span></div>
         <div class="notif">
           <div class="line"><b>Windows notifications</b><span class="pill" id="s-notify-pill">Off</span></div>
           <p id="s-notify-st"></p>

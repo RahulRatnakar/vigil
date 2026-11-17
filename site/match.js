@@ -182,6 +182,7 @@
     rule = rule || { kev: true, cvssMin: 9.0 };
     if (!match || !match.confidence) return false;
     if (match.confidence !== 'Watched' && !match.devices.length) return false;
+    if (rule.snwl && (adv.refs || []).some((r) => /^SNWLID-/i.test(r))) return true;   // every SonicWall PSIRT advisory, if switched on
     return (rule.kev && !!adv.kev) || (adv.cvss || 0) >= rule.cvssMin;
   }
 
@@ -286,6 +287,17 @@
     });
   }
 
-  const api = { norm, normalizeVendor, parseVersion, cmpVersion, loadInventory, matchAdvisory, isAlert, clientTickets, mergeWatch, remediation, advisoryFix };
+  // search: every word must appear in the CVE id, vendor advisory ids (SNWLID…), title, products or vendor name
+  function searchAdvisories(list, q, label) {
+    const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return list.slice();
+    label = label || ((k) => k);
+    return list.filter((a) => {
+      const hay = [a.id, ...(a.refs || []), a.title, ...(a.products || []), a.vendor, label(a.vendor)].join(' ').toLowerCase();
+      return words.every((w) => hay.includes(w));
+    });
+  }
+
+  const api = { norm, normalizeVendor, parseVersion, cmpVersion, loadInventory, matchAdvisory, isAlert, clientTickets, mergeWatch, remediation, advisoryFix, searchAdvisories };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.VIGIL = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -188,3 +188,33 @@ test('watched vendor that is in the tracker matches normally', () => {
   assert.equal(mm.confidence, 'Likely');
   assert.equal(mm.devices.length, 1);
 });
+
+const swAdv = (o = {}) => ({ id: 'CVE-2026-1001', vendor: 'sonicwall', title: 'SonicOS SSLVPN improper access control', products: ['SonicOS'],
+  refs: ['SNWLID-2026-0019'], affected: [], kev: false, cvss: 6.5, ...o });
+
+test('search: CVE, SNWLID, product and words, any case', () => {
+  const list = [swAdv(), fortiAdv({ title: 'FortiOS heap overflow', refs: [] })];
+  const ids = (q) => V.searchAdvisories(list, q, (k) => k).map((a) => a.id);
+  assert.deepEqual(ids('cve-2026-1001'), ['CVE-2026-1001']);
+  assert.deepEqual(ids('snwlid-2026-0019'), ['CVE-2026-1001']);
+  assert.deepEqual(ids('0019'), ['CVE-2026-1001']);
+  assert.deepEqual(ids('fortios heap'), ['CVE-2026-1111']);
+  assert.deepEqual(ids('sonicwall sslvpn'), ['CVE-2026-1001']);
+  assert.deepEqual(ids(''), ['CVE-2026-1001', 'CVE-2026-1111']);
+  assert.deepEqual(ids('nothing-like-this'), []);
+});
+
+test('alert rule: every new SonicWall advisory (SNWLID) when switched on', () => {
+  const d = devs({ Manufacturer: 'SonicWall, Inc.', 'Device Type': 'Firewall', Model: 'TZ470', 'Current version': '7.0.1' });
+  const a = swAdv();
+  const mm = V.matchAdvisory(a, d);
+  assert.equal(V.isAlert(a, mm, { kev: true, cvssMin: 9 }), false);
+  assert.equal(V.isAlert(a, mm, { kev: true, cvssMin: 9, snwl: true }), true);
+  assert.equal(V.isAlert(a, V.matchAdvisory(a, []), { kev: true, cvssMin: 9, snwl: true }), false);   // no SonicWall gear
+});
+
+test('search: words containing "s" are not split apart', () => {
+  const list = [swAdv({ id: 'CVE-2026-2002', title: 'SSO session bypass in SMA', products: ['SMA 100'] }), swAdv()];
+  assert.deepEqual(V.searchAdvisories(list, 'sessions', (k) => k).map((a) => a.id), []);
+  assert.deepEqual(V.searchAdvisories(list, 'session bypass', (k) => k).map((a) => a.id), ['CVE-2026-2002']);
+});

@@ -207,6 +207,31 @@ def paloalto(ctx):
     return out
 
 
+SNWL_URL = 'https://psirtapi.global.sonicwall.com/api/v1/vulnsummary/?srch=&vulnerable_products=&ord=-advisory_id'
+
+
+def sonicwall(ctx):
+    """SonicWall PSIRT (SNWLID-…). Each advisory is filed under every CVE it names, or under its own ID when it has none."""
+    out = []
+    for a in _json(ctx, SNWL_URL):
+        aid = str(a.get('advisory_id') or '').strip()
+        if not aid:
+            continue
+        pub = ctx['parse'](a.get('published_when'))
+        mod = ctx['parse'](a.get('last_updated_when')) or pub
+        try:
+            cvss = float(a['cvss']) if a.get('cvss') not in (None, '') else None
+        except (TypeError, ValueError):
+            cvss = None
+        products = [p.strip() for p in re.split(r'[,;]', str(a.get('vulnerable_products') or '')) if p.strip()][:5]
+        part = {'title': str(a.get('title') or '')[:200], 'vendor': 'sonicwall', 'products': products, 'cvss': cvss,
+                'published': pub, 'modified': mod, 'refs': [aid],
+                'urls': [f'https://psirt.global.sonicwall.com/vuln-detail/{aid}'], 'sources': ['sonicwall']}
+        ids = sorted(set(CVE_RE.findall(str(a.get('cve') or '')))) or [aid]
+        out += [dict(part, id=cid) for cid in ids]
+    return out
+
+
 def epss(ctx):
     want = [a['id'] for a in ctx['adv'].values() if a.get('epss') is None and a['id'].startswith('CVE-') and (a.get('vendor') or a.get('kev'))][:300]
     out = []
@@ -217,4 +242,4 @@ def epss(ctx):
 
 
 ORDER = [('kev', kev), ('cvelist', cvelist), ('nvd', nvd), ('fortinet', feed('fortinet')), ('cisco', feed('cisco')),
-         ('paloalto', paloalto), ('microsoft', feed('microsoft')), ('sophos', feed('sophos')), ('epss', epss)]
+         ('paloalto', paloalto), ('sonicwall', sonicwall), ('microsoft', feed('microsoft')), ('sophos', feed('sophos')), ('epss', epss)]

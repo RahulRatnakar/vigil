@@ -7,7 +7,7 @@
   const safeUrl = (u) => (/^https?:\/\//i.test(String(u || '')) ? String(u) : null);
   const REFRESH_MS = 5 * 60 * 1000;
   const SEV_RANK = { critical: 4, high: 3, medium: 2, low: 1 };
-  const SOURCE_NAMES = { kev: 'CISA KEV', cvelist: 'CVE List', nvd: 'NVD', epss: 'EPSS', fortinet: 'Fortinet', cisco: 'Cisco', paloalto: 'Palo Alto',
+  const SOURCE_NAMES = { kev: 'CISA KEV', cvelist: 'CVE List', nvd: 'NVD', epss: 'EPSS', fortinet: 'Fortinet', cisco: 'Cisco', paloalto: 'Palo Alto', sonicwall: 'SonicWall',
     microsoft: 'Microsoft', sophos: 'Sophos' };
 
   // ?src= lets a test point the page at a fixture; only same-site relative paths are accepted
@@ -75,7 +75,7 @@
   const m = (a) => S.matches.get(a.id) || { confidence: null, devices: [], clients: [], teams: [] };
   // what counts as affecting us: product-level matches and watched vendors; vendor-only matches only when exploited (or when asked for)
   const relevant = (a) => { const c = m(a).confidence; return c === 'Confirmed' || c === 'Likely' || c === 'Watched' || (c === 'Vendor only' && (a.kev || !!S.settings.vendorOnly)); };
-  const alerting = (a) => VIGIL.isAlert(a, m(a), { kev: S.settings.kev, cvssMin: Number(S.settings.cvssMin) || 9 });
+  const alerting = (a) => VIGIL.isAlert(a, m(a), { kev: S.settings.kev, cvssMin: Number(S.settings.cvssMin) || 9, snwl: S.settings.snwl !== false });
   const stamp = (a) => a.modified || a.published || '';
 
   let busy = null;
@@ -156,7 +156,7 @@
     return `<article class="row glass sev-${sev}${a.kev ? ' kev' : ''}${rev ? ' reviewed' : ''}${S.fresh.has(a.id) ? ' new' : ''}" data-id="${esc(a.id)}">
       <div class="score ${sev}">${a.cvss != null ? Number(a.cvss).toFixed(1) : '—'}<small>${esc(sev === 'none' ? 'n/a' : sev)}</small></div>
       <div class="main">
-        <div class="l1"><button class="cve" data-act="tab" data-tab="details" aria-expanded="${!!tab}">${esc(a.id)}</button>${a.kev ? '<span class="chip kev">Exploited</span>' : ''}${alerting(a) ? '<span class="chip alert">Alert</span>' : ''}${conf}</div>
+        <div class="l1"><button class="cve" data-act="tab" data-tab="details" aria-expanded="${!!tab}">${esc(a.id)}</button>${(a.refs || []).slice(0, 2).map((r) => `<span class="chip ref" title="Vendor advisory">${esc(r)}</span>`).join('')}${a.kev ? '<span class="chip kev">Exploited</span>' : ''}${alerting(a) ? '<span class="chip alert">Alert</span>' : ''}${conf}</div>
         <div class="ttl">${esc(a.title || '(no title yet)')}</div>
         <div class="fix"><b>Fix</b><span>${esc(fix || 'See the vendor advisory: fixed versions not published yet')}</span></div>
         <div class="l3"><span>${esc(label(a.vendor))}${(a.products || []).length ? ' · ' + esc(a.products.slice(0, 3).join(', ')) : ''}</span>${exposure}<span>${esc(ago(stamp(a)))}</span></div>
@@ -248,16 +248,35 @@
     $('#p-feeds').innerHTML = Object.entries(S.sources).map(([k, s]) => `<li><span class="dot ${s.status === 'ok' ? '' : 'amber'}"></span><span class="grow">${esc(SOURCE_NAMES[k] || k)}</span><span class="num">${esc(s.status === 'ok' ? ago(s.checked) : 'stale')}</span></li>`).join('') || '<li>No feed data</li>';
   }
 
+  // nothing found: say why, and offer one-click lookups at the official sources
+  function notFoundHTML(q) {
+    if (!q) return '<div class="glass empty-state"><strong>No advisories match these filters</strong></div>';
+    const raw = $('#f-q').value.trim(), up = raw.toUpperCase(), links = [];
+    const cve = /^CVE-\d{4}-\d{4,}$/.test(up), snw = /^SNWLID-\d{4}-\d{4}$/.test(up);
+    if (cve) links.push([`https://nvd.nist.gov/vuln/detail/${up}`, `${up} on NVD`], [`https://www.cve.org/CVERecord?id=${up}`, `${up} on CVE.org`]);
+    if (snw) links.push([`https://psirt.global.sonicwall.com/vuln-detail/${up}`, `${up} on SonicWall PSIRT`]);
+    links.push([`https://nvd.nist.gov/vuln/search/results?form_type=Basic&results_type=overview&query=${encodeURIComponent(raw)}&search_type=all`, `Search NVD for “${raw}”`]);
+    const filtered = $('#f-vendor').value || $('#f-sev').value || $('#f-kev').checked || $('#f-us').checked || $('#f-rev').checked || $('#f-days').value !== '90';
+    return `<div class="glass empty-state"><strong>“${esc(raw)}” isn’t in VIGIL${filtered ? ' with these filters' : ''}</strong>
+      <p>VIGIL keeps the last 90 days of advisories for vendors in your inventory and watch list${filtered ? '. Try clearing the filters' : ''}.</p>
+      <p class="lookups">${links.map(([u, t]) => `<a class="btn" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(t)} ↗</a>`).join(' ')}</p></div>`;
+  }
+  // the top-bar search: always searches everything (filters cleared)
+  function globalSearch(q) {
+    $('#f-q').value = q; $('#f-vendor').value = ''; $('#f-sev').value = ''; $('#f-days').value = '90';
+    ['#f-kev', '#f-us', '#f-rev'].forEach((s) => { $(s).checked = false; });
+    if (S.view !== 'advisories') go('advisories'); else renderAdvisories();
+  }
+
   function renderAdvisories() {
     const q = $('#f-q').value.trim().toLowerCase(), v = $('#f-vendor').value, sev = $('#f-sev').value, days = +$('#f-days').value;
     const since = new Date(Date.now() - days * 864e5).toISOString().replace(/\.\d+Z$/, 'Z');
     const min = { critical: 4, high: 3, medium: 2 }[sev] || 0;
-    const list = S.advisories.filter((a) => (!v || a.vendor === v || (v === '_other' && !a.vendor))
+    const list = VIGIL.searchAdvisories(S.advisories, q, label).filter((a) => (!v || a.vendor === v || (v === '_other' && !a.vendor))
       && (!min || (SEV_RANK[a.severity] || 0) >= min)
       && (!$('#f-kev').checked || a.kev) && (!$('#f-us').checked || relevant(a)) && (!$('#f-rev').checked || !S.reviewed.has(a.id))
-      && stamp(a) >= since
-      && (!q || (a.id + ' ' + a.title + ' ' + (a.products || []).join(' ') + ' ' + label(a.vendor)).toLowerCase().includes(q))).sort(byRank);
-    $('#adv-list').innerHTML = list.slice(0, 300).map(rowHTML).join('') || '<div class="glass empty-state"><strong>No advisories match these filters</strong></div>';
+      && stamp(a) >= since).sort(byRank);
+    $('#adv-list').innerHTML = list.slice(0, 300).map(rowHTML).join('') || notFoundHTML(q);
     const sel = $('#f-vendor'), cur = sel.value;
     const keys = [...new Set(S.advisories.map((a) => a.vendor).filter(Boolean))].sort((x, y) => label(x).localeCompare(label(y)));
     sel.innerHTML = '<option value="">All vendors</option>' + keys.map((k) => `<option value="${esc(k)}">${esc(label(k))}</option>`).join('') + '<option value="_other">Other (exploited, not ours)</option>';
@@ -304,10 +323,11 @@
   }
 
   function renderSettings() {
+    soundLabel();
     renderWatch();
     const im = S.inventoryMeta;
     $('#inv-info').innerHTML = im ? `<b>${esc(im.file)}</b> · sheet “${esc(im.sheet)}” · ${S.devices.length} devices · loaded ${esc(ago(im.loaded))}` : 'No inventory loaded.';
-    $('#s-kev').checked = S.settings.kev; $('#s-cvss').value = S.settings.cvssMin; $('#s-sound').checked = S.settings.sound; $('#s-lite').checked = S.settings.lite;
+    $('#s-kev').checked = S.settings.kev; $('#s-snwl').checked = S.settings.snwl !== false; $('#s-cvss').value = S.settings.cvssMin; $('#s-sound').checked = S.settings.sound; $('#s-lite').checked = S.settings.lite;
     const perm = 'Notification' in window ? Notification.permission : 'unsupported';
     const on = S.settings.notify && perm === 'granted';
     const pill = $('#s-notify-pill');
@@ -344,9 +364,33 @@
   function beep(kev) { if (S.settings.sound && window.VIGIL_SOUND) window.VIGIL_SOUND.alert(kev); }
   function setSound(on) {
     S.settings.sound = !!on;
-    if (window.VIGIL_SOUND) { window.VIGIL_SOUND.setEnabled(on); if (on) window.VIGIL_SOUND.unlock(); }
-    const b = $('#mute'); b.textContent = on ? '🔊 Sound' : '🔇 Muted'; b.setAttribute('aria-pressed', String(!on)); b.classList.toggle('on', !on);
+    if (window.VIGIL_SOUND) { window.VIGIL_SOUND.setEnabled(on); if (on) window.VIGIL_SOUND.unlock().then(soundLabel); }
+    soundLabel();
   }
+  // the header button tells the truth: on, muted by you, or blocked by the browser until a click
+  function soundState() {
+    const s = window.VIGIL_SOUND;
+    if (!s) return 'unsupported';
+    if (!S.settings.sound) return 'muted';
+    return s.locked ? 'blocked' : 'on';
+  }
+  function soundLabel() {
+    const b = $('#mute'), st = soundState();
+    b.textContent = st === 'on' ? '🔊 Sound' : st === 'muted' ? '🔇 Muted' : st === 'blocked' ? '🔈 Enable sound' : '🔇 No audio';
+    b.setAttribute('aria-pressed', String(st === 'muted'));
+    b.classList.toggle('on', st === 'muted');
+    b.classList.toggle('warn', st === 'blocked');
+    const p = $('#s-sound-st');
+    if (p) p.textContent = { on: 'Audio is on.', muted: 'Muted in VIGIL.', blocked: 'The browser is holding sound until you click. Press Test sound.', unsupported: 'This browser has no audio support.' }[st];
+  }
+  async function testSound() {
+    const s = window.VIGIL_SOUND; if (!s) return;
+    if (!S.settings.sound) { setSound(true); savePrefs(); }
+    await s.unlock(); soundLabel();
+    s.alert(false);
+    if (s.locked) toast({ title: 'Sound is blocked', text: 'Edge did not allow audio. Check the tab is not muted (right-click the tab → Unmute site) and the Windows volume mixer for Edge.' });
+  }
+  window.addEventListener('pointerdown', () => setTimeout(soundLabel, 300), true);
   function toast(t, kind) {
     const el = document.createElement('div');
     el.className = 'toast glass' + (kind === 'kev' ? ' kev' : '');
@@ -401,6 +445,15 @@
     }
   });
   ['#f-q', '#f-vendor', '#f-sev', '#f-days', '#f-kev', '#f-us', '#f-rev'].forEach((s) => $(s).addEventListener('input', renderAdvisories));
+  // top-bar search: searches everything as you type; Esc clears
+  let gTimer = 0;
+  $('#g-q').addEventListener('input', () => {
+    clearTimeout(gTimer);
+    gTimer = setTimeout(() => { const q = $('#g-q').value.trim(); if (q) globalSearch(q); else if (S.view === 'advisories') globalSearch(''); }, 220);
+  });
+  $('#g-form').addEventListener('submit', (e) => { e.preventDefault(); globalSearch($('#g-q').value.trim()); });
+  $('#g-q').addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('#g-q').value = ''; globalSearch(''); $('#g-q').blur(); } });
+  $('#f-q').addEventListener('input', () => { $('#g-q').value = $('#f-q').value; });
   $('#ov-hide').addEventListener('change', renderOverview);
   $('#ov-vo').addEventListener('change', () => { S.settings.vendorOnly = $('#ov-vo').checked; savePrefs(); render(); if (window.VIGIL_FX) window.VIGIL_FX.update(S, {}); });
   $$('input[name=exp]').forEach((r) => r.addEventListener('change', renderExposure));
@@ -409,9 +462,15 @@
   $('#forget').onclick = forgetInventory;
   const setChange = (sel, fn) => $(sel).addEventListener('change', () => { fn(); savePrefs(); render(); if (window.VIGIL_FX) window.VIGIL_FX.update(S, {}); });
   setChange('#s-kev', () => { S.settings.kev = $('#s-kev').checked; });
+  setChange('#s-snwl', () => { S.settings.snwl = $('#s-snwl').checked; });
   setChange('#s-cvss', () => { const v = parseFloat($('#s-cvss').value); S.settings.cvssMin = isNaN(v) ? 9 : Math.min(10, Math.max(0, v)); });
   setChange('#s-sound', () => setSound($('#s-sound').checked));
-  $('#mute').onclick = () => { setSound(!S.settings.sound); savePrefs(); renderSettings(); };
+  $('#mute').onclick = async () => {
+    if (soundState() === 'blocked') { await testSound(); return; }     // first click just switches audio on
+    setSound(!S.settings.sound); savePrefs(); renderSettings();
+    if (S.settings.sound && window.VIGIL_SOUND) window.VIGIL_SOUND.select();
+  };
+  $('#s-sound-test').onclick = testSound;
   setChange('#s-lite', () => {
     S.settings.lite = $('#s-lite').checked; document.body.classList.toggle('lite', S.settings.lite);
     try { localStorage.setItem('vigil-lite', S.settings.lite ? '1' : ''); } catch (e) { /* fine */ }   // read by the boot screen before IndexedDB is ready
@@ -484,7 +543,7 @@
   window.addEventListener('dragover', (e) => e.preventDefault());
   window.addEventListener('drop', (e) => { e.preventDefault(); dragDepth = 0; $('#drop').classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) readInventory(f); });
   document.addEventListener('keydown', (e) => {
-    if (e.key === '/' && !/input|select|textarea/i.test(document.activeElement.tagName)) { e.preventDefault(); go('advisories'); $('#f-q').focus(); }
+    if (e.key === '/' && !/input|select|textarea/i.test(document.activeElement.tagName)) { e.preventDefault(); $('#g-q').focus(); }
   });
 
   /* ---------- start ---------- */

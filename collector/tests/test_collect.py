@@ -48,9 +48,51 @@ class Fetcher:
 
 def base_routes(**extra):
     r = {'known_exploited': kev(), 'deltaLog': [], 'services.nvd.nist.gov': nvd_page(), 'api.first.org': {'data': []},
-         'security.paloaltonetworks.com/json': []}
+         'security.paloaltonetworks.com/json': [], 'psirtapi.global.sonicwall.com': []}
     r.update(extra)
     return r
+
+
+def snwl(aid, cve=None, cvss='9.1', impact='critical', when=NOW - timedelta(hours=2), title='SonicOS SSLVPN improper access control'):
+    return {'advisory_id': aid, 'title': title, 'published_when': iso(when), 'last_updated_when': iso(when), 'impact': impact,
+            'cvss': cvss, 'cve': cve, 'summary': '<p>Upgrade to <b>SonicOS 7.1.3-7015</b> or later.</p>', 'vulnerable_products': 'SonicOS'}
+
+
+class TestSonicWall(unittest.TestCase):
+    def test_snwlid_lands_on_each_cve(self):
+        f = Fetcher(base_routes(**{'psirtapi.global.sonicwall.com': [snwl('SNWLID-2026-0019', cve='CVE-2026-1001, CVE-2026-1002')]}))
+        by = {a['id']: a for a in run(NOW, {}, f, VMAP)['advisories']}
+        for cid in ('CVE-2026-1001', 'CVE-2026-1002'):
+            a = by[cid]
+            self.assertEqual(a['vendor'], 'sonicwall')
+            self.assertIn('SNWLID-2026-0019', a['refs'])
+            self.assertIn('sonicwall', a['sources'])
+            self.assertEqual(a['cvss'], 9.1)
+            self.assertIn('https://psirt.global.sonicwall.com/vuln-detail/SNWLID-2026-0019', a['urls'])
+
+    def test_snwlid_without_cve_is_its_own_advisory(self):
+        f = Fetcher(base_routes(**{'psirtapi.global.sonicwall.com': [snwl('SNWLID-2026-0021', cve=None, cvss=None, impact='not_defined', title='Informational Advisory: DPI-SSL')]}))
+        by = {a['id']: a for a in run(NOW, {}, f, VMAP)['advisories']}
+        a = by['SNWLID-2026-0021']
+        self.assertEqual(a['vendor'], 'sonicwall')
+        self.assertEqual(a['refs'], ['SNWLID-2026-0021'])
+        self.assertIsNone(a['cvss'])
+
+    def test_snwlid_merges_with_cve_list_record(self):
+        f = Fetcher(base_routes(**{'deltaLog': delta('CVE-2026-1001'), 'CVE-2026-1001.json': cve_record('CVE-2026-1001', vendor='SonicWall', product='SonicOS'),
+                                   'psirtapi.global.sonicwall.com': [snwl('SNWLID-2026-0019', cve='CVE-2026-1001')]}))
+        hits = [a for a in run(NOW, {}, f, VMAP)['advisories'] if a['id'] == 'CVE-2026-1001']
+        self.assertEqual(len(hits), 1)
+        self.assertTrue({'cvelist', 'sonicwall'} <= set(hits[0]['sources']))
+        self.assertIn('SNWLID-2026-0019', hits[0]['refs'])
+
+    def test_old_snwlid_not_kept(self):
+        f = Fetcher(base_routes(**{'psirtapi.global.sonicwall.com': [snwl('SNWLID-2025-0001', cve='CVE-2025-1', when=NOW - timedelta(days=200))]}))
+        self.assertNotIn('CVE-2025-1', {a['id'] for a in run(NOW, {}, f, VMAP)['advisories']})
+
+    def test_refs_field_always_present(self):
+        out = run(NOW, {}, Fetcher(base_routes(**{'deltaLog': delta('CVE-2026-7777'), 'CVE-2026-7777.json': cve_record('CVE-2026-7777')})), VMAP)
+        self.assertEqual([a['refs'] for a in out['advisories'] if a['id'] == 'CVE-2026-7777'], [[]])
 
 
 class TestCollector(unittest.TestCase):

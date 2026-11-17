@@ -31,7 +31,7 @@ def severity(score):
 
 def blank(aid):
     return {'id': aid, 'title': '', 'vendor': None, 'products': [], 'affected': [], 'cvss': None, 'severity': None, 'kev': False,
-            'epss': None, 'published': None, 'modified': None, 'urls': [], 'sources': [], 'fix': None, 'workaround': None}
+            'epss': None, 'published': None, 'modified': None, 'urls': [], 'sources': [], 'fix': None, 'workaround': None, 'refs': []}
 
 
 def merge(a, b):
@@ -41,8 +41,8 @@ def merge(a, b):
     a['vendor'] = a['vendor'] or b.get('vendor')
     a['fix'] = a.get('fix') or b.get('fix')
     a['workaround'] = a.get('workaround') or b.get('workaround')
-    for k in ('products', 'urls', 'sources'):
-        a[k] = list(dict.fromkeys(a[k] + (b.get(k) or [])))
+    for k in ('products', 'urls', 'sources', 'refs'):
+        a[k] = list(dict.fromkeys((a.get(k) or []) + (b.get(k) or [])))
     a['urls'] = a['urls'][:8]
     if b.get('affected') and (not a['affected'] or 'cvelist' in (b.get('sources') or [])):
         a['affected'] = b['affected']
@@ -96,7 +96,7 @@ def run(now, prev, fetch, vmap, sleep=time.sleep, nvd_delay=6.0):
     for a in adv.values():
         a['kev'] = a['kev'] or a['id'] in ctx['kev_ids']
         a['severity'] = severity(a['cvss'])
-        a.setdefault('fix', None); a.setdefault('workaround', None)
+        a.setdefault('fix', None); a.setdefault('workaround', None); a.setdefault('refs', [])
         newest = max(d for d in (a.get('published'), a.get('modified'), cutoff) if d)
         # ours, or actively exploited anywhere; and touched within the retention window
         if (a['vendor'] or a['kev']) and newest > cutoff:

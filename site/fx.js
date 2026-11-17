@@ -6,7 +6,7 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const C = { teal: '45,226,200', amber: '255,181,71', red: '255,61,94', blue: '90,169,255' };
   const SEV = { critical: 4, high: 3, medium: 2, low: 1 };
-  const SOURCE_NAMES = { kev: 'CISA KEV', cvelist: 'CVE List', nvd: 'NVD', epss: 'EPSS', fortinet: 'Fortinet', cisco: 'Cisco', paloalto: 'Palo Alto', microsoft: 'Microsoft', sophos: 'Sophos' };
+  const SOURCE_NAMES = { kev: 'CISA KEV', cvelist: 'CVE List', nvd: 'NVD', epss: 'EPSS', fortinet: 'Fortinet', cisco: 'Cisco', paloalto: 'Palo Alto', sonicwall: 'SonicWall', microsoft: 'Microsoft', sophos: 'Sophos' };
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let S = null, view = 'overview', raf = 0, last = 0, t0 = performance.now();
   const lite = () => reduced || (S && S.settings.lite);

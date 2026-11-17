@@ -10,10 +10,11 @@ These sources were checked on 2026-11-13 from a normal browser connection. "Usab
 | `epss` | FIRST EPSS | https://api.first.org/data/v1/epss | JSON | ✅ | Exploit-likelihood score, up to 100 CVEs per request |
 | `fortinet` | FortiGuard PSIRT | https://www.fortiguard.com/rss/ir.xml | RSS | ✅ | Vendor advisories, sometimes before the CVE appears |
 | `cisco` | Cisco PSIRT (covers Meraki) | https://sec.cloudapps.cisco.com/security/center/psirtrss20/CiscoSecurityAdvisory.xml | RSS | ✅ | |
+| `sonicwall` | SonicWall PSIRT (SNWLID) | https://psirtapi.global.sonicwall.com/api/v1/vulnsummary/ | JSON | ✅ | Each SNWLID is filed under its CVEs (or its own ID when it has none) and shown as a label. Optional alert on every new SNWLID |
 | `paloalto` | Palo Alto Networks | https://security.paloaltonetworks.com/json/ | JSON | ✅ | Includes severity and CVE ids |
 | `microsoft` | Microsoft MSRC | https://api.msrc.microsoft.com/update-guide/rss | RSS | ✅ | Large feed. Only items mentioning CVE ids are kept |
 | `sophos` | Sophos | https://www.sophos.com/en-us/security-advisories/feed | RSS | ✅ | |
 
 **Covered through the CVE List only** (their advisory pages are web pages, not feeds):
-- SonicWall, Juniper, HPE/Aruba, VMware/Broadcom, WatchGuard and Synology. These vendors file their own CVEs, so they still usually appear within minutes of publishing.
+- Juniper, HPE/Aruba, VMware/Broadcom, WatchGuard and Synology. These vendors file their own CVEs, so they still usually appear within minutes of publishing.
 - Ubiquiti, QNAP, Dell, Ruckus, Netgear, ADTRAN, EnGenius, Lenovo, Extreme, Supermicro, Araknis and the rest of `collector/vendors.json`. Speed depends on when their CVE is published.
