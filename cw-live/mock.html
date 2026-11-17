@@ -1,0 +1,115 @@
+<!doctype html>
+<!-- Fake ConnectWise board for testing: header and rows in separate tables inside an iframe, like CW. All names are made up. -->
+<title>Manage: Service Board</title>
+<body style="font:13px sans-serif;margin:0">
+<input id="cwfilter" style="position:absolute;top:0;right:0;width:80px"><script>setInterval(()=>{const f=document.getElementById("cwfilter"); if(document.activeElement!==f) f.focus();},150)</script>
+<iframe id="f" style="width:100%;height:100vh;border:0"></iframe>
+<script>
+const H = ["", "Ticket #", "Priority", "Status", "Age", "Company", "Summary Description", "Resources", "Entered", "Total Hours", "Schedule", "SLA Status", "Level", "Contact", "Item", "Last Update", "Due Date", "Ticket Bounce", ""];
+const CO = ["Northwind Credit Union", "Contoso Dental Group", "Fabrikam Logistics", "Tailspin Clinic", "Adatum Legal LLP", "Litware Manufacturing", "Proseware Schools", "Wingtip Hotels", "Alpine Ski Supply", "Blue Yonder Air", "Coho Winery", "Fourth Coffee", "Lamna Health", "Margie's Travel", "Relecloud Media", "Woodgrove Bank"];
+const SUM = ["Network Device Access Issue", "FortiGate firmware update", "Quarterly device review", "Firewall rule change request", "VPN tunnel down", "Switch port flapping", "Critical security updates", "Access point offline", "SonicWall advisory", "Device upgrade - storage"];
+const ST = ["New", "In Progress", "Scheduled (By Client)", "Waiting (Process/Maintenance)", "Waiting (Process/Maintenance)", "Waiting (Client Response)", "In Progress", "Client Responded"];
+const PR = ["#00C000", "#0000FF", "#0000FF", "#00C000", "#FF8C00", "#FF0000", "#CC00CC", "#FFFF00"];
+const ENG = ["radley.ratnakar", "anmol.sharma", "sienna.garg", "spathak", "richard.ross", "truc.nguyen"];
+let n = 14077700, seq = 0;
+const now = new Date();
+const md = (d, y) => `${d.getMonth() + 1}/${d.getDate()}${y ? "/" + String(d.getFullYear()).slice(2) : ""}`;
+const mk = id => { const s = seq++, ent = new Date(now - ((s * 7919) % 30) * 864e5), co = CO[(s * 5) % CO.length] ;
+  const due = new Date(now.getTime() + (((s * 13) % 11) - 3) * 3600e3), hh = due.getHours() % 12 || 12, mm = String(due.getMinutes()).padStart(2, "0");
+  const sla = s % 4 === 0 ? `Resolve by ${md(due)} ${hh}:${mm} ${due.getHours() >= 12 ? "PM" : "AM"} UTC-6` : "Waiting";
+  const res = s % 9 === 0 ? "" : [ENG[0], ENG[1 + s % 5], s % 3 ? ENG[1 + (s + 2) % 5] : ""].filter(Boolean).join(", ");
+  return { id, st: ST[s % ST.length], co, sum: `${SUM[s % SUM.length]} - ${co}`, ent: md(ent, 1), age: ((now - ent) / 864e5 + .1).toFixed(1), pr: PR[s % PR.length], sla, res }; };
+const rows = Array.from({ length: 60 }, (_, i) => mk(n + i));
+// priority square drawn three ways, like different CW versions might: coloured box, picture, CSS ::before square
+const pimg = c => { const cv = document.createElement("canvas"); cv.width = cv.height = 10; const g = cv.getContext("2d"); g.fillStyle = c; g.fillRect(0, 0, 10, 10); return cv.toDataURL(); };
+const pcell = r => r.id % 3 === 0 ? `<div style="width:10px;height:10px;background:${r.pr}"></div>` : r.id % 3 === 1 ? `<img src="${pimg(r.pr)}" width="10" height="10">` : `<span class="pb" style="--p:${r.pr}"></span>`;
+function row(r) { return `<tr class="GMDB3DUBGXF cw-ml-row${r.id % 2 ? " GMDB3DUBHXF" : ""}"><td><div><div class="x-grid-row-checker" style="width:12px;height:12px;border:1px solid #888;display:inline-block"></div></div></td><td><a href="#t${r.id}"><u>${r.id}</u></a></td><td>${pcell(r)}</td><td>${r.st}</td><td>${r.age}</td><td>${r.co}</td><td><a>${r.sum}</a></td><td>${r.res}</td><td>${r.ent}</td><td>0.25</td><td></td><td>${r.sla}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`; }
+const PS = 25; let page = 0, board = "(View All)";
+const BOARDS = ["(View All)", "NOC-1 Dispatch", "Proactive Firewall", "AfterHours"];
+function render() {
+  setTimeout(cwRequest, 0);
+  const d = document.getElementById("f").contentDocument, all = rows.slice().reverse(), last = Math.max(0, Math.ceil(all.length / PS) - 1);
+  page = Math.min(page, last);
+  const a = page * PS + 1, b = Math.min(all.length, (page + 1) * PS);
+  d.body.innerHTML = `<div style="position:absolute;left:0;top:0;right:0"><style>.pb::before{content:"";display:inline-block;width:10px;height:10px;background:var(--p)}</style><div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><span>Location:</span><input value="Meriplex Solutions"><span>Department:</span><input value="Proactive-2">
+      <span>Service Board:</span><input id="bi" value="${board}" readonly><div id="ba" style="width:14px;height:14px;cursor:pointer"><svg viewBox="0 0 10 10" width="14" height="14"><path d="M1 3l4 4 4-4" fill="none" stroke="#333"/></svg></div>
+      <ul id="bl" style="display:none;position:absolute;top:30px;left:420px;background:#fff;border:1px solid #999;list-style:none;padding:4px;margin:0;z-index:9">${BOARDS.map(x => `<li style="padding:4px 10px;cursor:pointer">${x}</li>`).join("")}</ul></div>
+    <div style="display:flex;gap:12px;align-items:center"><span id="act" style="cursor:pointer">Actions</span> <span id="s" style="cursor:pointer">SEARCH</span> <span>CLEAR</span>
+      <span style="flex:1"></span><span>Export</span><span>View</span><input value="*NOC-1 (NOC Dispatch View)" style="width:200px"><div id="pv" style="width:16px;height:16px;cursor:pointer"><svg viewBox="0 0 10 10" width="16" height="16"><path d="M7 1 3 5l4 4" fill="none" stroke="#333"/></svg></div><span>${a} - ${b} of ${all.length}</span><div id="nx" style="width:16px;height:16px;cursor:pointer"><svg viewBox="0 0 10 10" width="16" height="16"><path d="M3 1l4 4-4 4" fill="none" stroke="#333"/></svg></div></div>
+    <table><tr>${H.map(h => `<td><div>${h}</div></td>`).join("")}</tr></table>
+    <table>${all.slice(page * PS, (page + 1) * PS).map(row).join("")}</table></div>`;
+  // SEARCH adds one new ticket (like one arriving in CW) and keeps the current page
+  d.getElementById("s").onclick = () => { const r = mk(++n + 100); r.st = "New"; r.ent = md(now, 1); r.age = "0.0"; rows.push(r); setTimeout(render, 800); };
+  // board dropdown: picking a board swaps in a different set of tickets
+  d.getElementById("ba").onclick = () => { const l = d.getElementById("bl"); l.style.display = l.style.display === "none" ? "block" : "none"; };
+  d.querySelectorAll("#bl li").forEach(li => li.onclick = () => { board = li.textContent; rows.length = 0; for (let i = 0; i < 35; i++) rows.push(mk(n + 500 + i)); n += 600; page = 0; setTimeout(render, 700); });
+  d.getElementById("act").onclick = () => cwMenu(d);
+  d.querySelectorAll(".x-grid-row-checker").forEach(c => c.onclick = () => { const tr = c.closest("tr"); tr.classList.toggle("GMDB3DUBKXF"); const on = tr.classList.toggle("GMDB3DUBEXF"); d.querySelectorAll(".GMDB3DUBCBL").forEach(x => x.classList.remove("GMDB3DUBCBL")); if (on) tr.classList.add("GMDB3DUBCBL"); });
+  d.getElementById("pv").onclick = () => { if (page > 0) { page--; setTimeout(render, 600); } };
+  d.getElementById("nx").onclick = () => { if (page < last) { page++; setTimeout(render, 600); } };
+}
+
+// ---- fake CW Actions menu and windows, built like the real captures (GXT .cw-gxt-wnd, .mm_button, combo boxes) ----
+window.__did = [];
+const STS = ["New", "In Progress", "Waiting (3rd Party)", "Waiting (Process/Maintenance)", "Closed (Child/Merge/Bundle)", "#Client Responded*", "Completed*"];
+const checkedIds = d => [...d.querySelectorAll("tr.GMDB3DUBEXF")].filter(tr => tr.querySelector("a u")).map(tr => tr.querySelector("a u").textContent);
+const layer = (d, html, x, y) => { const e = d.createElement("div"); e.style.cssText = `position:absolute;left:${x}px;top:${y}px;background:#fff;border:1px solid #888;padding:6px;z-index:9;font:12px sans-serif`; e.innerHTML = html; d.body.appendChild(e); return e; };
+const btn = (txt) => `<div class="mm_button" style="display:inline-block;padding:2px 8px;border:1px solid #aaa;cursor:pointer"><div><div>${txt}</div></div></div>`;
+function cwMenu(d) {
+  const m = layer(d, ["Delete Ticket", "Update Status", "Combine Tickets", "Add Ticket Notes"].map(t => `<div class="mi" style="padding:2px 6px;cursor:pointer">${t}</div>`).join(""), 120, 30);
+  m.querySelectorAll(".mi").forEach(mi => mi.onclick = () => {
+    const t = mi.textContent;
+    if (t === "Combine Tickets") { const sm = layer(d, `<div class="mi" style="cursor:pointer">Bundle</div><div class="mi" style="cursor:pointer">Merge</div>`, 260, 60); sm.querySelector(".mi").onclick = () => { m.remove(); sm.remove(); setTimeout(() => winBundle(d), 300); }; return; }
+    m.remove(); if (t === "Add Ticket Notes") setTimeout(() => winNotes(d), 300); if (t === "Update Status") setTimeout(() => winStatus(d), 300);
+  });
+}
+const wnd = (d, title, inner) => layer(d, `<div class="cw-gxt-wnd" style="width:420px"><div class="x-window-draggable"><div class="cw-gxt-wnd-cls" style="float:right;cursor:pointer">x</div><div>${title}</div></div>${inner}</div>`, 160, 60).firstElementChild;
+function winNotes(d) {
+  const w = wnd(d, "Ticket Notes", `<div class="cw_NoteViewImpl"><div class="tb">${[1,2,3,4].map(() => `<div class="mm_button" style="display:inline-block;width:14px;height:14px;border:1px solid #999"></div>`).join(" ")}</div>
+    <div>Display note to:</div><div class="cw_discussion"><input type="checkbox"><label>Discussion</label></div><div class="cw_internal"><input type="checkbox"><label>Internal</label></div><div class="cw_resolution"><input type="checkbox"><label>Resolution</label></div>
+    <textarea class="cw_PsaTextArea"></textarea></div>`);
+  const b = w.querySelectorAll(".mm_button");
+  b[2].onclick = () => { __did.push({ kind: "note", ids: checkedIds(d), disc: w.querySelector(".cw_discussion input").checked, int: w.querySelector(".cw_internal input").checked, res: w.querySelector(".cw_resolution input").checked, text: w.querySelector("textarea").value }); w.parentElement.remove(); };
+  b[3].onclick = () => { __did.push({ kind: "DELETE-PRESSED" }); };
+}
+function combo(d, w, inp, items) {
+  let list = null;
+  inp.addEventListener("input", () => { if (list) list.remove(); const q = inp.value.toLowerCase(); const r = items().filter(t => t.toLowerCase().includes(q)); if (!r.length) return;
+    list = layer(d, r.map(t => `<div class="ci" style="cursor:pointer">${t}</div>`).join(""), 300, 160); list.querySelectorAll(".ci").forEach(ci => ci.onmousedown = () => { inp.value = ci.dataset.v || ci.textContent; list.remove(); list = null; }); });
+}
+function winStatus(d) {
+  const ids = checkedIds(d);
+  const w = wnd(d, "Update Service Ticket Status", `<div class="gwt-Label">NOTE: Only parent tickets will be updated</div><div>Service Status:</div><div class="mm_comboBox"><input class="cw_CwComboBox" type="text"><div class="cwsvg"><svg width=8 height=8></svg></div></div>
+    <div class="gwt-Label">You are about to update ${ids.length} tickets.</div><div class="gwt-Label">Do you wish to continue?</div>${btn("Save")} ${btn("Cancel")}`);
+  const inp = w.querySelector("input"); combo(d, w, inp, () => STS);
+  const bs = w.querySelectorAll(".mm_button");
+  bs[0].onclick = () => { if (!STS.includes(inp.value)) return; ids.forEach(id => { const r = rows.find(x => String(x.id) === id); if (r) r.st = inp.value; }); __did.push({ kind: "status", ids, status: inp.value }); w.parentElement.remove(); };
+  bs[1].onclick = () => { __did.push({ kind: "status-cancel" }); w.parentElement.remove(); };
+}
+function winBundle(d) {
+  const ids = checkedIds(d);
+  const w = wnd(d, "Confirm Bundle", `<div>Parent Ticket:</div><div class="mm_comboBox"><input class="cw_ServiceTicketPickerComboBox" type="text"></div>${btn("OK")} ${btn("Cancel")}`);
+  const inp = w.querySelector("input"); combo(d, w, inp, () => ids.map(i => `${i} - ${(rows.find(x => String(x.id) === i) || {}).sum}`));
+  const bs = w.querySelectorAll(".mm_button");
+  bs[0].onclick = () => { const par = (inp.value.match(/\d{7,9}/) || [])[0]; if (!par) return; ids.filter(i => i !== par).forEach(id => { const r = rows.find(x => String(x.id) === id); if (r) r.st = "Closed (Child/Merge/Bundle)"; }); __did.push({ kind: "bundle", ids, parent: par }); w.parentElement.remove(); };
+  bs[1].onclick = () => { w.parentElement.remove(); };
+}
+
+// ---- fake CW board data endpoint: the page "requests" it on every render (like CW), and answers fetches with JSON ----
+const FEED_URL = "/v4_6_release/services/system_io/actionprocessor/System/GetMultilineDataAction_srboard.rails";
+const PRC = { "#00C000": "Lime", "#0000FF": "Blue", "#FF8C00": "Orange", "#FF0000": "Red", "#CC00CC": "Magenta", "#FFFF00": "Yellow" };
+window.__feedCalls = 0;
+function cwRequest() { try { const x = new XMLHttpRequest(); x.open("POST", FEED_URL); x.setRequestHeader("content-type", "application/x-www-form-urlencoded; charset=UTF-8"); x.setRequestHeader("clientid", "test-client");
+  const payload = JSON.stringify({ requestAllCount: true, usePagination: true, multilineType: "ServiceML", activePage: page + 1, maxResult: PS, multilineName: "srboard", screenId: "sr100", jsonQueryExpression: "{}" });
+  x.send(new URLSearchParams({ actionMessage: JSON.stringify({ payload, payloadClassName: "GetMultilineDataAction", project: "SystemCommon" }), clientTimezoneOffset: "-300" }).toString()); } catch (e) {} }
+const _fetch = window.fetch;
+window.fetch = async (u, o) => {
+  if (!String(u).includes("GetMultilineDataAction_srboard")) return _fetch(u, o);
+  window.__feedCalls++; window.__feedHeaders = o && o.headers;
+  const p = JSON.parse(JSON.parse(new URLSearchParams(o.body).get("actionMessage")).payload), size = Math.min(p.maxResult, 25), all = rows.slice().reverse(), part = all.slice((p.activePage - 1) * size, p.activePage * size);
+  const conv = r => JSON.stringify({ SR_Service_RecID: r.id, Description: r.st, Age: r.age, Company_Name: r.co, Summary: r.sum, ResourceList: r.res, Resources: "common/images/infoIcons/SR2-person.gif", Date_Entered: String(Date.now() - parseFloat(r.age) * 864e5), SLA_Status_Text: r.sla, Urgency_Sort_Order: `common/images/../../common/images/infoIcons/urgencyColors/${PRC[r.pr] || "Lime"}.gif` });
+  return new Response(JSON.stringify({ success: true, error: null, data: { isSuccess: true, action: { maxResult: size, totalRecords: all.length, allCount: all.length, multilineRows: part.map(r => ({ row: conv(r) })) } } }), { headers: { "content-type": "application/json" } });
+};
+document.getElementById("f").onload = render; document.getElementById("f").src = "about:blank";
+</script>
+</body>

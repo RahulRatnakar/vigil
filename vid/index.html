@@ -1,0 +1,6 @@
+<!doctype html><body style="margin:0;background:#000">
+<video id=v src="v.mp4" muted playsinline style="width:100%"></video>
+<script>
+const v=document.getElementById('v');
+window.seek=t=>new Promise(r=>{v.onseeked=()=>r(v.currentTime);v.currentTime=t;});
+</script></body>
