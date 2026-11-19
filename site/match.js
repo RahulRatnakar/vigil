@@ -287,6 +287,41 @@
     });
   }
 
+  // firmware scope: is this about device firmware/OS (what a firmware-upgrade team acts on)? Rules live in vendors.json "scope"
+  const scopeCache = new WeakMap();
+  function scopeRules(vmap) {
+    let r = scopeCache.get(vmap || NOVMAP);
+    if (!r) {
+      const s = (vmap && vmap.scope) || {};
+      const words = (l) => (l || []).map(norm).filter(Boolean);
+      r = { sv: new Set(s.software_vendors || []), mv: new Set(s.mixed_vendors || []), sw: words(s.software_words), fw: words(s.firmware_words) };
+      scopeCache.set(vmap || NOVMAP, r);
+    }
+    return r;
+  }
+  function isFirmware(adv, vmap) {
+    vmap = vmap || root.VIGIL_VENDORS;
+    const r = scopeRules(vmap);
+    const mk = (s) => { const t = ' ' + norm(s) + ' '; return { t, tok: t.trim().split(' ') }; };
+    const all = mk([adv.title, ...(adv.products || []), ...(adv.affected || []).map((a) => a.product)].join(' '));
+    const title = mk(adv.title);
+    // whole word or phrase, or a word with a model number on the end ("idrac9", "ilo5")
+    const has = (list, x = all) => list.some((w) => x.t.includes(' ' + w + ' ')
+      || (!w.includes(' ') && x.tok.some((t) => t.startsWith(w) && /^\d/.test(t.slice(w.length)))));
+    if (adv.vendor && r.sv.has(adv.vendor)) return false;
+    if (has(r.sw)) return false;
+    if (!adv.vendor) return has(r.fw);
+    // it must really be the vendor's own issue: the title names the vendor or one of its products,
+    // or it came from the vendor's own feed. Otherwise it is a third-party library CVE (PHP, OpenSSL…) tagged by NVD.
+    const v = (vmap && vmap.vendors && vmap.vendors[adv.vendor]) || {};
+    const names = [adv.vendor, v.label, ...(v.aliases || []), ...(v.cve_names || []), ...(v.products || [])].map(norm).filter(Boolean)
+      .flatMap((n) => [n, ...n.split(' ').filter((w) => w.length > 3)]);
+    const ownFeed = (adv.sources || []).some((s) => s === adv.vendor || (v.feeds || []).includes(s));
+    if (!ownFeed && !has(names, title) && !has(r.fw, title)) return false;
+    if (r.mv.has(adv.vendor)) return has(r.fw);
+    return true;
+  }
+
   // search: every word must appear in the CVE id, vendor advisory ids (SNWLID…), title, products or vendor name
   function searchAdvisories(list, q, label) {
     const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
@@ -298,6 +333,6 @@
     });
   }
 
-  const api = { norm, normalizeVendor, parseVersion, cmpVersion, loadInventory, matchAdvisory, isAlert, clientTickets, mergeWatch, remediation, advisoryFix, searchAdvisories };
+  const api = { norm, normalizeVendor, parseVersion, cmpVersion, loadInventory, matchAdvisory, isAlert, clientTickets, mergeWatch, remediation, advisoryFix, searchAdvisories, isFirmware };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.VIGIL = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -74,8 +74,12 @@
   }
   const m = (a) => S.matches.get(a.id) || { confidence: null, devices: [], clients: [], teams: [] };
   // what counts as affecting us: product-level matches and watched vendors; vendor-only matches only when exploited (or when asked for)
-  const relevant = (a) => { const c = m(a).confidence; return c === 'Confirmed' || c === 'Likely' || c === 'Watched' || (c === 'Vendor only' && (a.kev || !!S.settings.vendorOnly)); };
-  const alerting = (a) => VIGIL.isAlert(a, m(a), { kev: S.settings.kev, cvssMin: Number(S.settings.cvssMin) || 9, snwl: S.settings.snwl !== false });
+  // firmware scope (your team upgrades device firmware/OS): remembered per advisory, since the check runs often
+  const fwMemo = new WeakMap();
+  const firm = (a) => { let v = fwMemo.get(a); if (v === undefined) { v = VIGIL.isFirmware(a, S.vmap); fwMemo.set(a, v); } return v; };
+  const inScope = (a) => S.settings.firmwareOnly === false || firm(a);
+  const relevant = (a) => { if (!inScope(a)) return false; const c = m(a).confidence; return c === 'Confirmed' || c === 'Likely' || c === 'Watched' || (c === 'Vendor only' && (a.kev || !!S.settings.vendorOnly)); };
+  const alerting = (a) => inScope(a) && VIGIL.isAlert(a, m(a), { kev: S.settings.kev, cvssMin: Number(S.settings.cvssMin) || 9, snwl: S.settings.snwl !== false });
   const stamp = (a) => a.modified || a.published || '';
 
   let busy = null;
@@ -85,8 +89,10 @@
   }
   async function doRefresh(first) {
     let data;
+    mind('thinking');
     try { data = await getJSON(SRC); } catch (e) {
       $('#age').textContent = 'data unavailable · retrying';
+      mind('offline');
       return;
     }
     S.advisories = data.advisories || []; S.sources = data.sources || {}; S.generated = data.generated;
@@ -101,8 +107,47 @@
     savePrefs();
     render();
     const hits = S.advisories.filter((a) => S.fresh.has(a.id) && alerting(a));
+    mind();
     if (hits.length) raise(hits);
     if (window.VIGIL_FX) window.VIGIL_FX.update(S, { first, fresh: S.fresh });
+  }
+
+  /* ---------- assistant presence (the orb in the top bar) + command wheel ---------- */
+  const presence = document.getElementById('presence'), wheel = document.getElementById('wheel');
+  let speakTimer = 0;
+  // state: thinking while loading/matching, speaking while reporting alerts, listening while you search, offline if data fails
+  function mind(st) {
+    if (!presence) return;
+    if (st) { presence.state = st; return; }
+    if (speakTimer) return;                                   // let an alert report finish first
+    presence.state = document.activeElement === $('#g-q') ? 'listening' : 'idle';
+  }
+  function speak(n) {
+    if (!presence) return;
+    clearTimeout(speakTimer);
+    presence.state = 'speaking';
+    const beats = Math.min(6, Math.max(1, n));
+    for (let i = 0; i < beats; i++) setTimeout(() => presence.pulse(0.9), i * 380);
+    speakTimer = setTimeout(() => { speakTimer = 0; mind(); }, beats * 380 + 1600);
+  }
+  const ICON = {
+    refresh: '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
+    search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>',
+    advisories: '<svg viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 10v4"/><path d="M12 17v.5"/></svg>',
+    exposure: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8"/></svg>',
+    vendors: '<svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="6" rx="1.5"/><rect x="3.5" y="14" width="17" height="6" rx="1.5"/><path d="M7 7h.5M7 17h.5"/></svg>',
+    settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>',
+  };
+  if (wheel) {
+    wheel.items = [['refresh', 'Refresh'], ['search', 'Search'], ['advisories', 'Advisories'], ['exposure', 'Exposure'], ['vendors', 'Vendors'], ['settings', 'Settings']]
+      .map(([id, label]) => ({ id, label, icon: ICON[id] }));
+    $('#ai-core').addEventListener('click', (e) => { if (window.VIGIL_SOUND) window.VIGIL_SOUND.select(); wheel.toggle(e.currentTarget); });
+    wheel.addEventListener('command', (e) => {
+      const id = e.detail.id;
+      if (id === 'refresh') refresh(false);
+      else if (id === 'search') $('#g-q').focus();
+      else go(id);
+    });
   }
 
   /* ---------- inventory ---------- */
@@ -156,7 +201,7 @@
     return `<article class="row glass sev-${sev}${a.kev ? ' kev' : ''}${rev ? ' reviewed' : ''}${S.fresh.has(a.id) ? ' new' : ''}" data-id="${esc(a.id)}">
       <div class="score ${sev}">${a.cvss != null ? Number(a.cvss).toFixed(1) : '—'}<small>${esc(sev === 'none' ? 'n/a' : sev)}</small></div>
       <div class="main">
-        <div class="l1"><button class="cve" data-act="tab" data-tab="details" aria-expanded="${!!tab}">${esc(a.id)}</button>${(a.refs || []).slice(0, 2).map((r) => `<span class="chip ref" title="Vendor advisory">${esc(r)}</span>`).join('')}${a.kev ? '<span class="chip kev">Exploited</span>' : ''}${alerting(a) ? '<span class="chip alert">Alert</span>' : ''}${conf}</div>
+        <div class="l1"><button class="cve" data-act="tab" data-tab="details" aria-expanded="${!!tab}">${esc(a.id)}</button>${firm(a) ? '<span class="chip fw" title="Device firmware/OS">Firmware</span>' : '<span class="chip sw" title="Software, not device firmware">Software</span>'}${(a.refs || []).slice(0, 2).map((r) => `<span class="chip ref" title="Vendor advisory">${esc(r)}</span>`).join('')}${a.kev ? '<span class="chip kev">Exploited</span>' : ''}${alerting(a) ? '<span class="chip alert">Alert</span>' : ''}${conf}</div>
         <div class="ttl">${esc(a.title || '(no title yet)')}</div>
         <div class="fix"><b>Fix</b><span>${esc(fix || 'See the vendor advisory: fixed versions not published yet')}</span></div>
         <div class="l3"><span>${esc(label(a.vendor))}${(a.products || []).length ? ' · ' + esc(a.products.slice(0, 3).join(', ')) : ''}</span>${exposure}<span>${esc(ago(stamp(a)))}</span></div>
@@ -219,6 +264,7 @@
     else if (alerts) { st.className = 'status warn'; st.innerHTML = `<span class="n">${alerts}</span> alert${alerts === 1 ? '' : 's'} open`; }
     else { st.className = 'status calm'; st.innerHTML = `All clear · <span class="n">${open.length}</span> to review`; }
     document.body.classList.toggle('kev-open', kevOpen > 0);
+    document.documentElement.style.setProperty('--presence-color', kevOpen ? '#ff3d5e' : alerts ? '#ffb547' : '#2de2c8');
     const src = Object.values(S.sources), stale = src.filter((s) => s.status !== 'ok').length;
     $('#feeds').innerHTML = `<span class="dot ${stale ? 'amber' : ''}"></span>${src.length - stale}/${src.length} feeds ok`;
     $('#age').textContent = S.generated ? 'data ' + ago(S.generated) : '';
@@ -232,6 +278,7 @@
 
   function renderOverview() {
     $('#ov-vo').checked = !!S.settings.vendorOnly;
+    $('#ov-fw').checked = S.settings.firmwareOnly !== false;
     const hide = $('#ov-hide').checked;
     let list = S.advisories.filter((a) => relevant(a) && !(hide && S.reviewed.has(a.id))).sort(byRank);
     let html = '';
@@ -256,7 +303,7 @@
     if (cve) links.push([`https://nvd.nist.gov/vuln/detail/${up}`, `${up} on NVD`], [`https://www.cve.org/CVERecord?id=${up}`, `${up} on CVE.org`]);
     if (snw) links.push([`https://psirt.global.sonicwall.com/vuln-detail/${up}`, `${up} on SonicWall PSIRT`]);
     links.push([`https://nvd.nist.gov/vuln/search/results?form_type=Basic&results_type=overview&query=${encodeURIComponent(raw)}&search_type=all`, `Search NVD for “${raw}”`]);
-    const filtered = $('#f-vendor').value || $('#f-sev').value || $('#f-kev').checked || $('#f-us').checked || $('#f-rev').checked || $('#f-days').value !== '90';
+    const filtered = $('#f-vendor').value || $('#f-sev').value || $('#f-kev').checked || $('#f-us').checked || $('#f-rev').checked || $('#f-fw').checked || $('#f-days').value !== '90';
     return `<div class="glass empty-state"><strong>“${esc(raw)}” isn’t in VIGIL${filtered ? ' with these filters' : ''}</strong>
       <p>VIGIL keeps the last 90 days of advisories for vendors in your inventory and watch list${filtered ? '. Try clearing the filters' : ''}.</p>
       <p class="lookups">${links.map(([u, t]) => `<a class="btn" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(t)} ↗</a>`).join(' ')}</p></div>`;
@@ -264,7 +311,7 @@
   // the top-bar search: always searches everything (filters cleared)
   function globalSearch(q) {
     $('#f-q').value = q; $('#f-vendor').value = ''; $('#f-sev').value = ''; $('#f-days').value = '90';
-    ['#f-kev', '#f-us', '#f-rev'].forEach((s) => { $(s).checked = false; });
+    ['#f-kev', '#f-us', '#f-rev', '#f-fw'].forEach((s) => { $(s).checked = false; });
     if (S.view !== 'advisories') go('advisories'); else renderAdvisories();
   }
 
@@ -274,7 +321,7 @@
     const min = { critical: 4, high: 3, medium: 2 }[sev] || 0;
     const list = VIGIL.searchAdvisories(S.advisories, q, label).filter((a) => (!v || a.vendor === v || (v === '_other' && !a.vendor))
       && (!min || (SEV_RANK[a.severity] || 0) >= min)
-      && (!$('#f-kev').checked || a.kev) && (!$('#f-us').checked || relevant(a)) && (!$('#f-rev').checked || !S.reviewed.has(a.id))
+      && (!$('#f-kev').checked || a.kev) && (!$('#f-us').checked || relevant(a)) && (!$('#f-rev').checked || !S.reviewed.has(a.id)) && (!$('#f-fw').checked || firm(a))
       && stamp(a) >= since).sort(byRank);
     $('#adv-list').innerHTML = list.slice(0, 300).map(rowHTML).join('') || notFoundHTML(q);
     const sel = $('#f-vendor'), cur = sel.value;
@@ -327,7 +374,7 @@
     renderWatch();
     const im = S.inventoryMeta;
     $('#inv-info').innerHTML = im ? `<b>${esc(im.file)}</b> · sheet “${esc(im.sheet)}” · ${S.devices.length} devices · loaded ${esc(ago(im.loaded))}` : 'No inventory loaded.';
-    $('#s-kev').checked = S.settings.kev; $('#s-snwl').checked = S.settings.snwl !== false; $('#s-cvss').value = S.settings.cvssMin; $('#s-sound').checked = S.settings.sound; $('#s-lite').checked = S.settings.lite;
+    $('#s-kev').checked = S.settings.kev; $('#s-snwl').checked = S.settings.snwl !== false; $('#s-fw').checked = S.settings.firmwareOnly !== false; $('#s-cvss').value = S.settings.cvssMin; $('#s-sound').checked = S.settings.sound; $('#s-lite').checked = S.settings.lite;
     const perm = 'Notification' in window ? Notification.permission : 'unsupported';
     const on = S.settings.notify && perm === 'granted';
     const pill = $('#s-notify-pill');
@@ -355,7 +402,7 @@
   }
   function openAdvisory(id) {
     S.open.set(id, 'details'); $('#f-q').value = id; $('#f-vendor').value = ''; $('#f-sev').value = ''; $('#f-days').value = '90';
-    ['#f-kev', '#f-us', '#f-rev'].forEach((s) => { $(s).checked = false; });
+    ['#f-kev', '#f-us', '#f-rev', '#f-fw'].forEach((s) => { $(s).checked = false; });
     go('advisories');
   }
   window.VIGIL_APP = { go, openAdvisory, filterVendor: (k) => { $('#f-q').value = ''; go('advisories'); $('#f-vendor').value = k; renderAdvisories(); }, label, alerting, m, relevant };
@@ -403,6 +450,7 @@
     return el;
   }
   function raise(hits) {
+    speak(hits.length);
     const kev = hits.some((a) => a.kev);
     if (hits.length > 5) {
       toast({ title: `${hits.length} new alert advisories`, text: hits.slice(0, 4).map((a) => a.id).join(', ') + '…', sticky: true,
@@ -444,7 +492,7 @@
       if (window.VIGIL_SOUND) window.VIGIL_SOUND.tick();
     }
   });
-  ['#f-q', '#f-vendor', '#f-sev', '#f-days', '#f-kev', '#f-us', '#f-rev'].forEach((s) => $(s).addEventListener('input', renderAdvisories));
+  ['#f-q', '#f-vendor', '#f-sev', '#f-days', '#f-kev', '#f-us', '#f-rev', '#f-fw'].forEach((s) => $(s).addEventListener('input', renderAdvisories));
   // top-bar search: searches everything as you type; Esc clears
   let gTimer = 0;
   $('#g-q').addEventListener('input', () => {
@@ -452,10 +500,13 @@
     gTimer = setTimeout(() => { const q = $('#g-q').value.trim(); if (q) globalSearch(q); else if (S.view === 'advisories') globalSearch(''); }, 220);
   });
   $('#g-form').addEventListener('submit', (e) => { e.preventDefault(); globalSearch($('#g-q').value.trim()); });
+  $('#g-q').addEventListener('focus', () => mind('listening'));
+  $('#g-q').addEventListener('blur', () => mind());
   $('#g-q').addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('#g-q').value = ''; globalSearch(''); $('#g-q').blur(); } });
   $('#f-q').addEventListener('input', () => { $('#g-q').value = $('#f-q').value; });
   $('#ov-hide').addEventListener('change', renderOverview);
   $('#ov-vo').addEventListener('change', () => { S.settings.vendorOnly = $('#ov-vo').checked; savePrefs(); render(); if (window.VIGIL_FX) window.VIGIL_FX.update(S, {}); });
+  $('#ov-fw').addEventListener('change', () => { S.settings.firmwareOnly = $('#ov-fw').checked; $('#f-fw').checked = S.settings.firmwareOnly; savePrefs(); render(); if (window.VIGIL_FX) window.VIGIL_FX.update(S, {}); });
   $$('input[name=exp]').forEach((r) => r.addEventListener('change', renderExposure));
   $('#refresh').onclick = () => refresh(false);
   $('#file').onchange = (e) => e.target.files[0] && readInventory(e.target.files[0]);
@@ -463,6 +514,7 @@
   const setChange = (sel, fn) => $(sel).addEventListener('change', () => { fn(); savePrefs(); render(); if (window.VIGIL_FX) window.VIGIL_FX.update(S, {}); });
   setChange('#s-kev', () => { S.settings.kev = $('#s-kev').checked; });
   setChange('#s-snwl', () => { S.settings.snwl = $('#s-snwl').checked; });
+  setChange('#s-fw', () => { S.settings.firmwareOnly = $('#s-fw').checked; $('#f-fw').checked = S.settings.firmwareOnly; });
   setChange('#s-cvss', () => { const v = parseFloat($('#s-cvss').value); S.settings.cvssMin = isNaN(v) ? 9 : Math.min(10, Math.max(0, v)); });
   setChange('#s-sound', () => setSound($('#s-sound').checked));
   $('#mute').onclick = async () => {
@@ -472,7 +524,7 @@
   };
   $('#s-sound-test').onclick = testSound;
   setChange('#s-lite', () => {
-    S.settings.lite = $('#s-lite').checked; document.body.classList.toggle('lite', S.settings.lite);
+    S.settings.lite = $('#s-lite').checked; document.body.classList.toggle('lite', S.settings.lite); if (presence) presence.toggleAttribute('still', S.settings.lite);
     try { localStorage.setItem('vigil-lite', S.settings.lite ? '1' : ''); } catch (e) { /* fine */ }   // read by the boot screen before IndexedDB is ready
   });
   function testNotify() {
@@ -555,8 +607,10 @@
       Object.assign(S.settings, prefs.settings || {});
       setSound(S.settings.sound);
     }
+    $('#f-fw').checked = S.settings.firmwareOnly !== false;
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) S.settings.lite = true;
     document.body.classList.toggle('lite', S.settings.lite);
+    if (presence) presence.toggleAttribute('still', S.settings.lite);
     if (inv) { S.devices = inv.devices || []; S.unmatched = inv.unmatched || []; S.inventoryMeta = inv.meta || null; }
     await refresh(true);
     setInterval(() => { if (!document.hidden) refresh(false); }, REFRESH_MS);

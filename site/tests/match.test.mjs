@@ -218,3 +218,45 @@ test('search: words containing "s" are not split apart', () => {
   assert.deepEqual(V.searchAdvisories(list, 'sessions', (k) => k).map((a) => a.id), []);
   assert.deepEqual(V.searchAdvisories(list, 'session bypass', (k) => k).map((a) => a.id), ['CVE-2026-2002']);
 });
+
+test('firmware scope: device firmware/OS in, apps and Windows out', () => {
+  const fw = (vendor, title, products = []) => V.isFirmware({ id: 'X', vendor, title, products, affected: [] }, VMAP);
+  // network / appliance vendors: firmware unless it is one of their client apps
+  assert.equal(fw('fortinet', 'FortiOS SSL-VPN heap overflow', ['FortiOS']), true);
+  assert.equal(fw('fortinet', 'FortiOS DHCP client buffer overflow', ['FortiOS']), true);
+  assert.equal(fw('fortinet', 'FortiClient EMS SQL injection', ['FortiClientEMS']), false);
+  assert.equal(fw('paloalto', 'PAN-OS: GlobalProtect gateway authentication bypass', ['PAN-OS']), true);
+  assert.equal(fw('paloalto', 'GlobalProtect App for Windows privilege escalation', ['GlobalProtect App']), false);
+  assert.equal(fw('cisco', 'Cisco IOS XE Software Web UI privilege escalation', ['IOS XE Software']), true);
+  assert.equal(fw('cisco', 'Meraki MX dashboard authentication bypass', ['Meraki MX']), true);
+  assert.equal(fw('cisco', 'Cisco Webex Meetings XSS', ['Webex Meetings']), false);
+  assert.equal(fw('cisco', 'Cisco Secure Client for Windows DLL hijacking', ['Secure Client']), false);
+  assert.equal(fw('sonicwall', 'Informational Advisory: SonicOS Client DPI-SSL Trust', ['SonicOS']), true);
+  // mixed vendors: only their firmware counts
+  assert.equal(fw('dell', 'iDRAC9 privilege escalation', ['iDRAC9']), true);
+  assert.equal(fw('dell', 'Dell PowerEdge BIOS improper input validation', ['PowerEdge BIOS']), true);
+  assert.equal(fw('dell', 'Dell SupportAssist for Home PCs local privilege escalation', ['SupportAssist']), false);
+  assert.equal(fw('hpe', 'HPE Integrated Lights-Out 5 (iLO 5) remote code execution', ['iLO 5']), true);
+  assert.equal(fw('vmware', 'VMware ESXi VMX out-of-bounds write', ['ESXi']), true);
+  assert.equal(fw('vmware', 'VMware Workstation use-after-free', ['Workstation']), false);
+  assert.equal(fw('nvidia', 'NVIDIA GPU Display Driver for Windows', ['GPU Display Driver']), false);
+  assert.equal(fw('nvidia', 'NVIDIA BMC firmware authentication bypass', ['BMC']), true);
+  // software-only vendors and unknown vendors
+  assert.equal(fw('microsoft', 'Windows SMB remote code execution', ['Windows Server']), false);
+  assert.equal(fw(null, 'Acme Toaster OS default credentials', ['Toaster OS']), false);
+  assert.equal(fw(null, 'Zyxel firewall firmware command injection', ['ATP firmware']), true);
+});
+
+test('firmware scope: third-party component CVEs and vendor software tools stay out', () => {
+  const fw = (vendor, title, products = [], sources = ['nvd']) => V.isFirmware({ id: 'X', vendor, title, products, affected: [], sources }, VMAP);
+  assert.equal(fw('cisco', 'PHP Stale Internal Request-State Vulnerability', ['php']), false);
+  assert.equal(fw('fortinet', 'Google Brotli Unchecked Return Value Vulnerability', ['brotli']), false);
+  assert.equal(fw('netapp', 'Issue summary: Calling the OpenSSL API function SSL_select_next_proto', ['ontap select deploy administration utility']), false);
+  assert.equal(fw('dell', 'Dell Ansible Storage for PowerFlex contains an improper', ['ansible storage']), false);
+  assert.equal(fw('vmware', 'The Nginx routing configuration for Cloud Controller blocks unauthenticated', ['cloud controller']), false);
+  assert.equal(fw('vmware', 'The vCenter Server contains multiple local privilege escalation', ['vcenter server']), true);
+  assert.equal(fw('dell', 'Dell PowerStore contains an authorization-bypass vulnerability', ['powerstore']), true);
+  assert.equal(fw('dell', 'Dell SmartFabric OS10 Software, versions prior to 10.6.0.10', ['smartfabric os10']), true);
+  // the vendor's own feed counts as naming the vendor, even with a generic title
+  assert.equal(fw('fortinet', 'Heap overflow in SSL-VPN web portal', [], ['fortinet']), true);
+});

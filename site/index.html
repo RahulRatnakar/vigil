@@ -35,7 +35,10 @@ button,input,select{font:inherit;color:inherit}
 /* header */
 header{display:flex;align-items:center;gap:18px;padding:18px 0 10px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:10px;font:700 26px/1 var(--f-display);letter-spacing:.32em}
-.brand svg{width:28px;height:28px}
+.ai-core{all:unset;cursor:pointer;width:46px;height:46px;border-radius:50%;display:block;flex:none;transition:transform .15s}
+.ai-core:hover{transform:scale(1.08)}
+.ai-core:focus-visible{outline:2px solid var(--teal);outline-offset:3px}
+:root{--presence-color:#2de2c8;--presence-alert:#ff3d5e;--wheel-accent:#2de2c8;--wheel-bg:rgba(8,18,26,.94);--wheel-ink:#d9e7ee;--wheel-line:rgba(120,220,230,.28)}
 .status{flex:1;min-width:260px;font:600 clamp(18px,2.6vw,30px)/1.1 var(--f-display);letter-spacing:.08em;text-transform:uppercase}
 .status .n{font-family:var(--f-mono);font-weight:600}
 .status.calm{color:var(--teal)} .status.warn{color:var(--amber)} .status.hot{color:var(--red);text-shadow:0 0 18px rgba(255,61,94,.45)}
@@ -45,6 +48,9 @@ header{display:flex;align-items:center;gap:18px;padding:18px 0 10px;flex-wrap:wr
 .gsearch svg{width:16px;height:16px;color:var(--muted);flex:none}
 .gsearch input{flex:1;min-width:0;background:none;border:0;outline:none;padding:8px 0}
 .gsearch kbd{font:11px var(--f-mono);color:var(--muted);border:1px solid var(--line2);border-radius:5px;padding:1px 6px}
+.chip.fw{color:var(--teal);border-color:rgba(45,226,200,.5);background:var(--teal-d)}
+.chip.sw{color:var(--muted);border-style:dashed}
+.fwtoggle{color:var(--teal)!important;font-weight:600}
 .chip.ref{color:#c9e8ff;border-color:rgba(90,169,255,.55);background:rgba(90,169,255,.12)}
 .lookups{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
 .empty-state p{margin:6px 0 0}
@@ -274,9 +280,13 @@ td.num{font-family:var(--f-mono);text-align:right} th.num{text-align:right}
 
 <div class="wrap">
   <header>
-    <div class="brand" aria-label="VIGIL">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 29 27H3z" fill="none" stroke="#2de2c8" stroke-width="2.5"/><circle cx="16" cy="19" r="3" fill="#2de2c8"/></svg>VIGIL
+    <div class="brand">
+      <button class="ai-core" id="ai-core" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Open VIGIL commands" title="Commands">
+        <ai-presence id="presence" state="thinking" label="VIGIL"></ai-presence>
+      </button>
+      <span>VIGIL</span>
     </div>
+    <command-wheel id="wheel"></command-wheel>
     <div id="status" class="status calm">Loading…</div>
     <form class="gsearch" id="g-form" role="search" autocomplete="off">
       <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M13 13l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -310,7 +320,7 @@ td.num{font-family:var(--f-mono);text-align:right} th.num{text-align:right}
       <div class="glass"><h3 class="panel-h">Most exposed clients</h3><ul class="mini" id="p-clients"></ul></div>
       <div class="glass"><h3 class="panel-h">Feed health</h3><ul class="mini" id="p-feeds"></ul></div>
     </div>
-    <div class="bar"><h2>Triage</h2><label title="Vendor-only = we have this vendor, but the advisory names a product we could not find in the tracker"><input type="checkbox" id="ov-vo"> Include vendor-only matches</label><label><input type="checkbox" id="ov-hide"> Hide reviewed</label></div>
+    <div class="bar"><h2>Triage</h2><label class="fwtoggle" title="Device firmware/OS only. Untick to also see Windows, client apps and other software"><input type="checkbox" id="ov-fw"> Firmware only</label><label title="Vendor-only = we have this vendor, but the advisory names a product we could not find in the tracker"><input type="checkbox" id="ov-vo"> Include vendor-only matches</label><label><input type="checkbox" id="ov-hide"> Hide reviewed</label></div>
     <div class="list" id="triage"></div>
   </section>
 
@@ -323,6 +333,7 @@ td.num{font-family:var(--f-mono);text-align:right} th.num{text-align:right}
       <select id="f-days" aria-label="Date range"><option value="7">7 days</option><option value="30">30 days</option><option value="90" selected>90 days</option></select>
       <label><input type="checkbox" id="f-kev"> Exploited</label>
       <label><input type="checkbox" id="f-us"> Affects us</label>
+      <label><input type="checkbox" id="f-fw" checked> Firmware only</label>
       <label><input type="checkbox" id="f-rev"> Hide reviewed</label>
     </div>
     <div class="list" id="adv-list"></div>
@@ -360,6 +371,7 @@ td.num{font-family:var(--f-mono);text-align:right} th.num{text-align:right}
         <p>Alert when an advisory affects a vendor we have, and…</p>
         <label class="line"><input type="checkbox" id="s-kev"> it is on the exploited list (CISA KEV)</label>
         <label class="line"><input type="checkbox" id="s-snwl"> it is any new SonicWall advisory (SNWLID), whatever its score</label>
+        <label class="line"><input type="checkbox" id="s-fw"> <span><b>Firmware only</b>: show and alert on device firmware/OS advisories only (turn off to also see Windows, client apps and other software)</span></label>
         <label class="line">or its CVSS is at least <input type="number" id="s-cvss" min="0" max="10" step="0.1"></label>
         <h3 style="margin-top:8px">Signals</h3>
         <div class="line"><label class="line"><input type="checkbox" id="s-sound"> Sound</label><button class="btn" id="s-sound-test" type="button">Test sound</button><span id="s-sound-st" style="color:var(--muted);font-size:13px"></span></div>
@@ -396,6 +408,8 @@ td.num{font-family:var(--f-mono);text-align:right} th.num{text-align:right}
 
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="match.js"></script>
+<script src="presence.js"></script>
+<script src="command-wheel.js"></script>
 <script src="sound.js"></script>
 <script src="app.js"></script>
 <script src="fx.js"></script>
